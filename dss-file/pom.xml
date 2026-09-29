@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.dss</groupId>
+        <artifactId>dss</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>dss-file</artifactId>
+    <name>dss-file</name>
+    <description>文件上传（FastDFS）。骨架期还没引入 FastDFS 客户端依赖，选型见 docs/中间件配置.md 5.5</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.dss</groupId>
+            <artifactId>dss-common</artifactId>
+        </dependency>
+    </dependencies>
+</project>

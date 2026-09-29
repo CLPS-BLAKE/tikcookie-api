@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.dss</groupId>
+        <artifactId>dss</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>dss-order</artifactId>
+    <name>dss-order</name>
+    <description>订单、模拟支付、退款、核销、超时取消、抢购落单、定时任务</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.dss</groupId>
+            <artifactId>dss-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.dss</groupId>
+            <artifactId>dss-product</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.dss</groupId>
+            <artifactId>dss-shop</artifactId>
+        </dependency>
+    </dependencies>
+</project>

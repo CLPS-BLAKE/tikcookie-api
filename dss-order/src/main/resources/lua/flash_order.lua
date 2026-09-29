@@ -1,0 +1,19 @@
+-- 抢购：原子地预扣库存 + 校验每人限购（骨架期只有契约，没有实现）
+--
+-- KEYS[1]  抢购剩余库存   dss:flash:stock:{productId}    string（整数）
+-- KEYS[2]  每人已购数     dss:flash:bought:{productId}   hash，field = userId，value = 已购数
+-- ARGV[1]  userId
+-- ARGV[2]  limitPerUser   每人限购数量
+--
+-- 返回值：
+--   0  成功：库存 -1，该用户已购数 +1
+--   1  库存不足              → 业务码 103010
+--   2  超过限购              → 业务码 103011
+--
+-- 时间窗（未开始 103008 / 已结束 103009）由 Java 在调用脚本前校验。
+-- 取消待支付的抢购订单时，由 Java 回补：INCR 库存、HINCRBY 已购数 -1。
+--
+-- TODO 实现步骤：
+--   1. GET KEYS[1]，不存在或 <= 0 返回 1
+--   2. HGET KEYS[2] ARGV[1]，>= ARGV[2] 返回 2
+--   3. DECR KEYS[1]；HINCRBY KEYS[2] ARGV[1] 1；返回 0
