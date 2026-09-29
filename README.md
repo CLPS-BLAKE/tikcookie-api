@@ -13,7 +13,7 @@ TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 
 - API 文档：Swagger / OpenAPI
 - 对应前端仓库：[tikcookie-web](https://github.com/CLPS-BLAKE/tikcookie-web)
 
-> 当前仓库处于协作规范初始化阶段。Java、Spring Boot、构建工具及中间件版本将在后端项目骨架合并时固定。
+> 后端项目骨架已建立。Java、Spring Boot、构建工具和客户端库的版本见下文"本地构建"；中间件服务端的镜像版本由部署配置锁定。
 
 ## 文档入口
 
@@ -28,6 +28,38 @@ TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 
 - [团队职责登记](docs/TEAM.md)
 - [安全说明](SECURITY.md)
 
+## 本地构建
+
+后端是单个 Maven 模块，按业务分包：`com.dss.common`、`user`、`shop`、`product`、`order`、`favorite`、`search`、`file`。目前业务方法都是桩，调用返回 HTTP 501 / 业务码 50100。
+
+| 项 | 版本 |
+| --- | --- |
+| JDK | 21 |
+| Maven | 3.6.3 及以上（本地用 3.9.9 验证） |
+| Spring Boot | 3.5.16 |
+| MyBatis-Plus | 3.5.17（`mybatis-plus-spring-boot3-starter` + `mybatis-plus-jsqlparser`） |
+| MySQL 驱动 | mysql-connector-j 9.7.0（由 Spring Boot 管理） |
+| Elasticsearch 客户端 | 8.18.8，Spring Data Elasticsearch 5.5.13（由 Spring Boot 管理） |
+| 阿里云 OSS SDK | 3.18.5 |
+| springdoc-openapi | 2.8.17 |
+
+服务端需要 MySQL 8.x 和 Elasticsearch 8.x（与 8.18 客户端兼容），另有 Redis、RabbitMQ 和 OSS。
+
+构建命令（依次编译、单元测试、打包，产物是 `target/dss-0.0.1-SNAPSHOT.jar`；CI 使用同一条命令）：
+
+```bash
+mvn -B clean package
+```
+
+`src/test` 目前还是空的，测试阶段会显示 `No tests to run.`。
+
+本地运行：
+
+1. 在空的 MySQL 8.x 库上，用有建表权限的管理账号执行根目录的 `dss-init.sql`（只建 5 张表和索引，不写数据）。
+2. 按根目录的 `.env.example` 准备环境变量。标"必填"的缺一个，应用就会启动失败。Spring Boot 不会自动读取 `.env`：Linux / macOS 可以先执行 `set -a; . ./.env; set +a`；Windows 在 IDEA 运行配置的"环境变量"里填写。
+3. 启动：`java -jar target/dss-0.0.1-SNAPSHOT.jar`，或在 IDEA 里运行 `com.dss.DssApplication`。
+4. 打开 `http://localhost:8080/swagger-ui.html` 查看接口。调用内部接口前，先在 Authorize 里填入 `X-Internal-Key`。
+
 ## 基本协作规则
 
 1. 禁止直接向 `main` 推送业务代码。
@@ -40,5 +72,5 @@ TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 
 
 ## 当前状态
 
-当前提交只建立仓库文档和协作基础，不代表业务代码、中间件、CI/CD 或云端部署已经完成。
+已有仓库文档、协作基础和后端项目骨架（接口、配置和表结构已定义，业务方法仍是桩）。业务实现、中间件联调、CI/CD 和云端部署都还没有完成。
 
