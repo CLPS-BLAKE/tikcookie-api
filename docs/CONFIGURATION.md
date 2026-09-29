@@ -30,7 +30,7 @@
 ## 4. 建议配置分组
 
 - 应用端口与运行环境
-- MongoDB 连接
+- MySQL 连接（地址、端口、库名、账号、口令、JDBC 参数）
 - Redis 连接
 - RabbitMQ 连接
 - Elasticsearch 连接

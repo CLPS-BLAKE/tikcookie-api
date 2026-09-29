@@ -7,7 +7,7 @@
 | 位置 | 目标服务 |
 | --- | --- |
 | ECS A：demo-app | Nginx、前端、Spring Boot、Redis、RabbitMQ |
-| ECS B：demo-data | MongoDB、Elasticsearch |
+| ECS B：demo-data | MySQL、Elasticsearch |
 
 前端与后端分别构建镜像并推送至阿里云 ACR。合并 `main` 后，由 GitHub Actions 构建并调用阿里云云助手执行部署脚本。
 
@@ -36,9 +36,9 @@ deploy/
 
 ## 4. 数据与持久化
 
-- MongoDB、Elasticsearch、RabbitMQ 以及需要保留状态的 Redis 使用持久化卷。
-- MongoDB 是业务数据来源。
-- Elasticsearch 索引可从 MongoDB 重建。
+- MySQL、Elasticsearch、RabbitMQ 以及需要保留状态的 Redis 使用持久化卷。
+- MySQL 是业务数据来源。
+- Elasticsearch 索引可从 MySQL 重建。
 - 演示数据应可重复导入并覆盖主要业务场景。
 
 ## 5. 网络边界
@@ -46,7 +46,7 @@ deploy/
 - 公网仅开放 Nginx 所需的 80/443。
 - SSH 仅允许可信来源访问。
 - Spring Boot 经 Nginx `/api` 转发，不直接暴露公网。
-- MongoDB 和 Elasticsearch 仅允许 ECS A 通过内网访问。
+- MySQL 和 Elasticsearch 仅允许 ECS A 通过内网访问。
 - Redis、RabbitMQ 仅供应用网络访问。
 
 ## 6. 首次部署前待确定项

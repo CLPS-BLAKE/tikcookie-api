@@ -21,7 +21,7 @@ TikCookie 是一个团购业务方向的 Java 教学展示项目。团队共 5 �
 | 位置 | 服务 |
 | --- | --- |
 | ECS A：demo-app | Nginx、前端、Spring Boot、Redis、RabbitMQ |
-| ECS B：demo-data | MongoDB、Elasticsearch |
+| ECS B：demo-data | MySQL、Elasticsearch |
 | 阿里云 OSS | 商品图片与用户上传图片 |
 | 阿里云 ACR | 前端与后端镜像 |
 
@@ -31,7 +31,7 @@ TikCookie 是一个团购业务方向的 Java 教学展示项目。团队共 5 �
 
 | 组件 | 业务用途 | 验收方式 |
 | --- | --- | --- |
-| MongoDB | 用户、店铺、商品和订单数据 | 数据可写入、查询并持久保存 |
+| MySQL + MyBatis-Plus | 用户、店铺、商品和订单数据 | 数据可写入、查询并持久保存 |
 | Redis | 登录状态、验证码或热门商品缓存 | 至少一个真实功能使用 Redis |
 | RabbitMQ | 商品变更消息 | 可观察消息生产、消费与失败处理 |
 | Elasticsearch | 商品搜索和分类筛选 | 使用真实索引，商品变化后结果可更新 |
@@ -39,15 +39,15 @@ TikCookie 是一个团购业务方向的 Java 教学展示项目。团队共 5 �
 
 ## 4. 示例业务链路
 
-商品新增或更新后，后端写入 MongoDB，并发送 RabbitMQ 消息；消费者根据消息更新 Elasticsearch 索引。搜索接口查询 Elasticsearch，业务详情仍以 MongoDB 为准。
+商品新增或更新后，后端写入 MySQL，并发送 RabbitMQ 消息；消费者根据消息更新 Elasticsearch 索引。搜索接口查询 Elasticsearch，业务详情仍以 MySQL 为准。
 
-Elasticsearch 索引必须能够从 MongoDB 重建，不能作为唯一业务数据来源。
+Elasticsearch 索引必须能够从 MySQL 重建，不能作为唯一业务数据来源。
 
 ## 5. 尚待项目骨架确定的内容
 
 - Java、Spring Boot 与 Maven/Gradle 版本
 - 代码目录、模块边界和异常响应结构
-- MongoDB 数据模型与索引
+- MySQL 表结构与索引（含 MyBatis-Plus 实体映射约定）
 - 各中间件固定版本
 - 本地启动、检查、测试和构建命令
 - Dockerfile、Compose 与 CI/CD 工作流
