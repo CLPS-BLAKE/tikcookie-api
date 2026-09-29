@@ -5,7 +5,7 @@ TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 
 ## 项目定位
 
 - 后端技术方向：Spring Boot
-- 数据存储：MongoDB
+- 数据存储：MySQL 8.0（单机 InnoDB） + MyBatis-Plus
 - 缓存：Redis
 - 消息队列：RabbitMQ
 - 商品检索：Elasticsearch
