@@ -3,6 +3,10 @@
 spring:
   application:
     name: dss
+  # 本地开发：启动时把工作目录下的 .env 当作 properties 读进来（模块工作目录就是 tikcookie-api，.env 已在 .gitignore 里）。
+  # optional: 文件不存在时静默跳过；操作系统环境变量优先级高于配置文件，所以服务器/CI 用真实环境变量注入时不受影响。
+  config:
+    import: optional:file:./.env[.properties]
   profiles:
     active: ${DSS_PROFILE:dev}
   jackson:
@@ -77,8 +81,12 @@ dss:
   auth:
     token-ttl: ${DSS_AUTH_TOKEN_TTL:P7D}
   file:
-    # 图片的 HTTPS 公共读取前缀（末尾不带 /）；返回的 url = base-url + "/" + fileId
-    base-url: ${DSS_FILE_BASE_URL}
+    # 图片读取前缀（末尾不带 /）；返回的 url = base-url + "/" + fileId。
+    # Bucket 已开公共读：填 OSS 公共域名（或自己的 CNAME 域名，如 https://<bucket>.oss-<region>.aliyuncs.com），
+    # 游客和登录用户都能用 <img src> 直连看图；留空则按下面的 oss.endpoint + bucket 自动推导同一个域名。
+    # 也可以填后端代理读图接口（本地 http://127.0.0.1:8080/api/v1/images、服务器 https://<演示域名>/api/v1/images），
+    # 图片改走后端转发，适合 Bucket 再次收紧为私有读的情况。
+    base-url: ${DSS_FILE_BASE_URL:}
     max-size: ${DSS_FILE_MAX_SIZE:5MB}
     allowed-types: ${DSS_FILE_ALLOWED_TYPES:image/jpeg,image/png,image/webp}
     oss:

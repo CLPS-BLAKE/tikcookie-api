@@ -23,7 +23,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
             "/api/v1/categories",
             "/api/v1/shops/**",
             "/api/v1/products/**",
-            "/api/v1/search/**"
+            "/api/v1/search/**",
+            // 读图：Bucket 公共读时前端直连 OSS 域名；这个代理接口是备用路径（私有读场景），
+            // <img src> 带不了 Authorization 头，所以必须公开。
+            // 注意上传入口 /api/v1/files/images 不在这里，它仍然要求登录。
+            "/api/v1/images/**"
     };
 
     private final LoginInterceptor loginInterceptor;
