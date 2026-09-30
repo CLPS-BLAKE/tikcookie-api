@@ -27,7 +27,7 @@ public class FlashProductVO {
     @Schema(description = "展示图完整 URL")
     private String imageUrl;
 
-    @Schema(description = "剩余库存（Redis）")
+    @Schema(description = "剩余库存（MySQL），展示时可能随并发下单变化")
     private Integer remainingStock;
 
     @Schema(description = "开抢时间")

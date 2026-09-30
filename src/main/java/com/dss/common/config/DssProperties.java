@@ -35,7 +35,13 @@ public class DssProperties {
 
     @Data
     public static class FileProperties {
-        /** 图片公共读取前缀（末尾不带 /）：返回给前端的 url = baseUrl + "/" + fileId。 */
+        /**
+         * 图片公共读取前缀（末尾不带 /）：返回给前端的 url = baseUrl + "/" + fileId。
+         * Bucket 公共读时填 OSS 公共域名（或自己的 CNAME 域名），如
+         * https://blake-tikcookie.oss-cn-guangzhou.aliyuncs.com；留空时由
+         * {@link com.dss.common.file.FileUrlResolver} 按 oss.endpoint + bucket 自动推导。
+         * 也可以填后端代理读图接口（如 http://127.0.0.1:8080/api/v1/images），图片走后端转发。
+         */
         private String baseUrl;
         /** 单张图片上限。 */
         private DataSize maxSize = DataSize.ofMegabytes(5);
