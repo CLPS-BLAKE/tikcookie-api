@@ -27,6 +27,10 @@
 
 示例值必须使用明显占位符，不得复制真实凭据。
 
+2026-10-08 已确认 ECS 为 2 核 4 GB，原四种中间件同驻 node1；后端已部署阿里云，Nginx/前端待部署。Logstash 已在 `/opt/tikcookie-data` 使用 Compose 部署并同步，详情见 [LOGSTASH_SYNC.md](LOGSTASH_SYNC.md)。后端实例、是否同驻 node1 及容器网络待记录。应用的 `DSS_MYSQL_HOST`、`DSS_REDIS_HOST`、`DSS_RABBIT_HOST`、`DSS_ES_URIS` 使用受控可达地址/实际端口，不能照搬 Logstash 容器内的 `mysql`、`es` 服务名或服务器 localhost。真实配置仅存受控环境文件。
+
+Logstash Compose 复用 `DSS_MYSQL_USERNAME/PASSWORD`，容器内 MySQL/ES 分别使用 `mysql:3306`、`es:9200`。`MYSQL_ROOT_PASSWORD`、`ELASTIC_PASSWORD` 为 Compose 必需变量，必须对应已有实例真实口令；改变环境变量不会重置已有卷中的密码。保持 `DSS_SEARCH_REBUILD_ON_STARTUP=false`，Java 重建尚未实现。部署者已确认服务器可用，本地配置文件是否同步补齐不能据此推断；本次文档更新不修改 `.env`。
+
 ## 4. 建议配置分组
 
 - 应用端口与运行环境
