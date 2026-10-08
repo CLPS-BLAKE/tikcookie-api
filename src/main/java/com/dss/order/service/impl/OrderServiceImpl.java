@@ -390,7 +390,9 @@ public class OrderServiceImpl implements OrderService {
         var update = Wrappers.<Order>lambdaUpdate()
                 .eq(Order::getId, order.getId())
                 .eq(Order::getStatus, OrderStatus.UNUSED)
-                .gt(expiredBefore != null, Order::getExpiresAt, expiredBefore)
+                // 到期退款的条件和扫描一致：只退 expires_at 已过（<= expiredBefore）的订单，
+                // 未到期的 UNUSED 不会被这条 UPDATE 命中；状态已不是 UNUSED 时更新行数为 0，重复扫描不会重复扣销量
+                .le(expiredBefore != null, Order::getExpiresAt, expiredBefore)
                 .set(Order::getStatus, OrderStatus.REFUNDED)
                 .set(Order::getRefundedAt, now)
                 .set(Order::getRefundReason, reason)
