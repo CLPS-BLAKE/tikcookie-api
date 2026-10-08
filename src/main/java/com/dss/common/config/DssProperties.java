@@ -78,7 +78,7 @@ public class DssProperties {
 
     @Data
     public static class SearchProperties {
-        /** 为 true 时启动后清空并从 MySQL 全量重建两个 ES 索引；只给部署方用。 */
+        /** Logstash 模式必须 false；误设 true 时启动失败，不执行 Java 索引重建。 */
         private boolean rebuildOnStartup = false;
     }
 }

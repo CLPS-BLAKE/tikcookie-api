@@ -7,13 +7,10 @@ import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 
 /**
- * 搜索同步的交换机、队列、绑定和死信（已实现），拓扑见 docs/中间件配置.md 5.1。
- * 应用连上 RabbitMQ 时由 RabbitAdmin 自动声明，全部持久化；项目里只有这一条 MQ 链路。
+ * 历史 MQ 拓扑辅助代码，不注册为 Spring 配置；Logstash 模式不声明交换机或队列。
  */
-@Configuration
 public class SearchMqConfig {
 
     @Bean

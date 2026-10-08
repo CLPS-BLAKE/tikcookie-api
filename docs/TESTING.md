@@ -20,8 +20,9 @@
 
 - 已核对的远端 main `af739da` 尚无测试源文件；本地工作区已有未提交的公共契约、鉴权、图片及消息发布测试，提交并执行后才能计入远端交付。
 - 默认公共/文件测试使用 Mock 或纯单元测试，不依赖真实中间件；覆盖响应、异常、序列化、分页、鉴权、ObjectKey、URL、上传/读图和消息发布等。
-- `OssFileStorageLiveTest`、`SearchSyncPublisherRabbitLiveTest` 是真实联调用例，缺少对应 `.env` 配置会跳过。跳过不是验证通过；需记录执行/跳过数量及原因。
-- `.env` 只保存在受控本地环境，连接 node1 的中间件和 OSS；本次文档更新未运行这些测试，也未证明订单/搜索/收藏已有覆盖。
+- SearchApiEsLiveTest 仅在进程环境 DSS_ES_LIVE_TEST=true 时运行，只读真实索引；开启后连接/数据断言失败是失败，不能跳过。默认构建不导入真实 ES 测试配置。
+- OssFileStorageLiveTest、SearchSyncPublisherRabbitLiveTest 为历史真实联调，分别需要显式 DSS_OSS_LIVE_TEST=true、DSS_RABBIT_LIVE_TEST=true 才执行；默认即使存在 .env 也不运行，防止构建上传对象或连接 MQ。跳过不是验证通过。
+- .env 只保存在受控本地环境。新增搜索服务、HTTP 契约、日期转换、搜索 MQ 隔离和完整应用启动测试；通用 MQ 配置仍可用，搜索不消费/发布；本次搜索验证记录见 [SEARCH_API.md](SEARCH_API.md)，不扩大为订单/收藏全链路验收。
 
 ### 2.2 全接口验收
 
@@ -36,13 +37,13 @@
 
 ## 3. 中间件验收
 
-MySQL、Redis、RabbitMQ、ES 已确认同驻 node1。2026-10-08 负责人另确认 Logstash 部署及同步成功：店铺 5/5、商品 30/30，mapping 符合配置，见 [部署记录](LOGSTASH_SYNC.md)。逐项增量、字段抽样、重启、故障和容量证据待补录；Java SearchService 查询/同步/重建仍未实现，不把同步成功记为搜索 API 或 RabbitMQ 消费完成。凭据/用户数据不放入 PR。
+MySQL、Redis、RabbitMQ、ES 已确认同驻 node1。2026-10-08 Logstash 同步确认见 [部署记录](LOGSTASH_SYNC.md)；本地分支两个 Java 搜索 API 已只读联调，见搜索验收记录。仅搜索不使用 MQ、禁止 Java 索引同步/重建；通用 RabbitMQ 基础能力供其他业务复用。增量、重启、物理删除、故障重放及容量证据仍需部署侧补录，不能用搜索查询测试代替同步运维验收。凭据/用户数据不放入 PR。
 
 | 组件 | 最低验收 |
 | --- | --- |
 | MySQL | 核心业务数据可写入、查询并在容器重建后保留 |
 | Redis | 至少一个真实业务功能命中缓存或状态存储 |
-| RabbitMQ | 可观察商品变更消息的生产、消费及失败处理 |
+| RabbitMQ | 通用连接/Template/转换器/回调可用；仅搜索无队列/消费者、变更通知不投递；其他业务 MQ 功能另行验收 |
 | Logstash | 已确认部署和同步；补录更新时间轮询、店铺关联字段、游标恢复和故障重放，说明物理删除限制 |
 | Elasticsearch | 关键词搜索使用真实索引，商品变更后结果更新 |
 | OSS | 图片上传成功，页面可访问，密钥不暴露给客户端 |
@@ -59,7 +60,7 @@ MySQL、Redis、RabbitMQ、ES 已确认同驻 node1。2026-10-08 负责人另确
 - 重复支付、取消、退款和去使用不重复改变库存/销量；只能操作本人订单
 - 到期退款回归：已到期 UNUSED 被退款、未到期不被任务退款、重复扫描不重复扣销量；先修复更新条件再启用 `DSS_JOB_ENABLED`
 - 超时取消未付抢购单回补库存；前端倒计时依据真实 payDeadline
-- Logstash 字段抽样、店铺改名/分类关联更新、增量和重启恢复；死信/故障后维护重放与删除残留处理，不依赖未实现的 Java 重建
+- Logstash 字段抽样、店铺改名/分类关联更新、增量和重启恢复；故障后维护重放与删除残留处理，不调用 Java 重建
 - 32 个既定业务接口无 501；额外代理读图接口单独验收
 
 ## 5. PR 验证证据

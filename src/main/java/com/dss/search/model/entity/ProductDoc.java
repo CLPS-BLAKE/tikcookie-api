@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 
 /**
  * 商品搜索文档（索引 dss_product），字段见 docs/中间件配置.md 5.2；中文字段用 ES 自带的 standard 分析器，不装 IK。
- * createIndex = false：应用启动时不连 ES、不建索引；索引由全量重建（SearchService.rebuildAll）按本类的注解删掉重建。
+ * createIndex = false：应用不自动创建索引；mapping 和 MySQL 同步由 Logstash 部署维护。
  * writeTypeHint = FALSE：不往文档里写 _class。
  */
 @Data
