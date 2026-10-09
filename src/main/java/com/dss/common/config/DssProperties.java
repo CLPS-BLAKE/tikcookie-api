@@ -20,6 +20,7 @@ public class DssProperties {
     private OrderProperties order = new OrderProperties();
     private JobProperties job = new JobProperties();
     private SearchProperties search = new SearchProperties();
+    private DemoProperties demo = new DemoProperties();
 
     @Data
     public static class InternalProperties {
@@ -80,5 +81,11 @@ public class DssProperties {
     public static class SearchProperties {
         /** Logstash 模式必须 false；误设 true 时启动失败，不执行 Java 索引重建。 */
         private boolean rebuildOnStartup = false;
+    }
+
+    @Data
+    public static class DemoProperties {
+        /** 启动时自动灌抢购演示数据（classpath:db/dss-demo-data.sql）；只在库内还没有演示数据时播种一次。默认关，生产不要开。 */
+        private boolean seedEnabled = false;
     }
 }

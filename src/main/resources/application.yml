@@ -107,6 +107,9 @@ dss:
   search:
     # Logstash 唯一写入方：必须保持 false。误设 true 时明确启动失败，不执行删索引。
     rebuild-on-startup: ${DSS_SEARCH_REBUILD_ON_STARTUP:false}
+  demo:
+    # 启动时自动灌抢购演示数据（只在库内还没有演示数据时播种一次，不覆盖已有数据）；默认关，生产不要开
+    seed-enabled: ${DSS_DEMO_SEED_ENABLED:false}
 
 logging:
   level:
