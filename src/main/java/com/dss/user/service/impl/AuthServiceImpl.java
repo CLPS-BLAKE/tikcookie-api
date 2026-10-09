@@ -40,7 +40,7 @@ public class AuthServiceImpl implements AuthService {
     private final FileUrlResolver fileUrlResolver;
 
     @Override
-    public void sendSmsCode(String phone) {
+    public String sendSmsCode(String phone) {
         // setIfAbsent 是原子操作：60 秒内只有第一个请求能写上间隔标记，后面的直接拒绝
         Boolean first = redisTemplate.opsForValue()
                 .setIfAbsent(RedisKeys.loginCodeInterval(phone), "1", RedisKeys.LOGIN_CODE_INTERVAL);
@@ -57,6 +57,9 @@ public class AuthServiceImpl implements AuthService {
         // 不接短信网关：验证码打印日志，开发/演示时去后端日志里看（需求文档第 2 节）
         log.info("【开发用】手机号 {} 的登录验证码：{}（{} 分钟内有效）",
                 phone, code, RedisKeys.LOGIN_CODE_TTL.toMinutes());
+
+        //验证码发给Redis，同步发给前端（省去前端再赴Redis获取验证码）
+        return code;
     }
 
     @Override

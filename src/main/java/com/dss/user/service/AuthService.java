@@ -16,7 +16,7 @@ public interface AuthService {
      *     <li>不接真短信：验证码写 INFO 日志（只用于练手）。</li>
      * </ul>
      */
-    void sendSmsCode(String phone);
+    String sendSmsCode(String phone);
 
     /**
      * 登录 / 自动注册。
