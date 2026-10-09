@@ -1,4 +1,4 @@
-package com.dss.file.service;
+package com.dss.common.file;
 
 import java.io.Closeable;
 import java.io.IOException;

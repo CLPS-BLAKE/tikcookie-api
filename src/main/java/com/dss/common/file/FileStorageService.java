@@ -1,9 +1,14 @@
-package com.dss.file.service;
+package com.dss.common.file;
 
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 文件存储：阿里云 OSS 实现（OssFileStorage），规则见需求文档 4.3、中间件配置第 6 节。
+ * 文件存储：阿里云 OSS 实现（{@code com.dss.file.service.impl.OssFileStorage}），规则见需求文档 4.3、中间件配置第 6 节。
+ * <p>
+ * 接口放在 common 包（实现仍在 file 包），是为了让业务模块能直接依赖它：按包的依赖约定，user、shop、
+ * product、comment 等业务包不能 import file 包，注入了本接口就能"收图 → 存 OSS → 拿到 fileId"，
+ * 不用各自持有 OSS 凭据。头像（user）、店铺图与商品图（shop、product）、评价图（comment）走的是同一套上传。
+ * <p>
  * fileId 就是 OSS ObjectKey（如 group1/M00/00/00/{uuid}.jpg，由 ObjectKeys 统一生成）；
  * 库里只存 fileId，返回给前端的 url 由 FileUrlResolver 拼成 `图片公共前缀 + "/" + fileId`
  * （前缀取 dss.file.base-url，未配置时推导出 OSS 公共域名）。

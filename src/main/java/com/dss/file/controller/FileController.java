@@ -1,11 +1,11 @@
 package com.dss.file.controller;
 
 import com.dss.common.config.OpenApiConfig;
+import com.dss.common.file.FileStorageService;
 import com.dss.common.file.FileUrlResolver;
+import com.dss.common.file.StoredImage;
 import com.dss.common.result.Result;
 import com.dss.file.model.vo.UploadVO;
-import com.dss.file.service.FileStorageService;
-import com.dss.file.service.StoredImage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
