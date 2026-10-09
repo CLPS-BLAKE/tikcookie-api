@@ -1,7 +1,11 @@
 package com.dss.user.service;
 
 import com.dss.user.model.dto.UpdateProfileDTO;
+import com.dss.user.model.entity.User;
 import com.dss.user.model.vo.UserVO;
+
+import java.util.Collection;
+import java.util.Map;
 
 /**
  * 用户资料。规则见接口文档 5.1.4–5.1.5、需求文档第 2 节（账号）。
@@ -19,4 +23,9 @@ public interface UserService {
      * 用户不存在时返回 101005。
      */
     UserVO updateProfile(Long userId, UpdateProfileDTO dto);
+
+    /**
+     * 批量取用户（评价列表等用）；不存在的 ID 不出现在结果里。
+     */
+    Map<Long, User> getUsersByIds(Collection<Long> userIds);
 }

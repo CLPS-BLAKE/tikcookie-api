@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 内部：录入店铺（请求头 X-Internal-Key）。接口文档 5.8.1–5.8.2。
+ * 内部：录入店铺（请求头 X-Internal-Key）。接口文档 5.9.1–5.9.2。
  */
 @Tag(name = "内部：店铺")
 @RestController

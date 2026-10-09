@@ -3,6 +3,7 @@ package com.dss.order.service;
 import com.dss.common.result.PageResult;
 import com.dss.order.model.dto.CreateOrderDTO;
 import com.dss.order.model.dto.OrderQuery;
+import com.dss.order.model.entity.Order;
 import com.dss.order.model.vo.OrderCreatedVO;
 import com.dss.order.model.vo.OrderListItemVO;
 import com.dss.order.model.vo.OrderVO;
@@ -66,6 +67,11 @@ public interface OrderService {
      * 订单详情：不存在或不是本人 104001；只有 UNUSED、USED 时返回券码。
      */
     OrderVO getMyOrder(Long userId, Long orderId);
+
+    /**
+     * 取本人订单实体（供评价等模块调用）：不存在或不是本人 104001。
+     */
+    Order requireMyOrder(Long userId, Long orderId);
 
     /**
      * 去使用（本人订单，教学模拟核销）：不存在或不是本人 104001；已过 expiresAt 104005；不是 UNUSED 104006。
