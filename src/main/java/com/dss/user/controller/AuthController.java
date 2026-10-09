@@ -28,11 +28,12 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @Operation(summary = "发送验证码（公开）", description = "不真发短信，验证码打印在后端日志里；同一手机号 60 秒内不能重发")
+    @Operation(summary = "发送验证码（开发环境）",
+            description = "验证码存入 Redis 后，同时通过接口返回；同一手机号 60 秒内不能重发")
     @PostMapping("/sms-code")
-    public Result<Void> sendSmsCode(@Valid @RequestBody SmsCodeDTO dto) {
-        authService.sendSmsCode(dto.getPhone());
-        return Result.ok();
+    public Result<String> sendSmsCode(@Valid @RequestBody SmsCodeDTO dto) {
+        String code = authService.sendSmsCode(dto.getPhone());
+        return Result.ok(code);
     }
 
     @Operation(summary = "登录 / 自动注册（公开）", description = "手机号 + 验证码；新手机号自动注册；返回 token 和用户资料")
