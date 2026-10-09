@@ -438,7 +438,8 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /** 本人订单，不存在或不是本人的一律按 104001 处理。 */
-    private Order requireMyOrder(Long userId, Long orderId) {
+    @Override
+    public Order requireMyOrder(Long userId, Long orderId) {
         Order order = orderMapper.selectOne(Wrappers.<Order>lambdaQuery()
                 .eq(Order::getId, orderId)
                 .eq(Order::getUserId, userId));

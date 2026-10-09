@@ -29,7 +29,7 @@ import java.io.IOException;
  * 读取是公开的后端代理接口，把 OSS 里的图片转发给浏览器。
  * Bucket 已开公共读，返回给前端的 url 默认直连 OSS 域名（见 {@link FileUrlResolver}），
  * 代理读图接口作为备用路径保留：Bucket 若收紧为私有读，把 dss.file.base-url 指向它即可，前端无需改动。
- * 接口文档 5.2.1、5.8.6；读图见 docs/图片上传与搜索消息联调说明.md。
+ * 接口文档 5.2.1、5.9.6；读图见 docs/图片上传与搜索消息联调说明.md。
  */
 @Tag(name = "文件")
 @RestController

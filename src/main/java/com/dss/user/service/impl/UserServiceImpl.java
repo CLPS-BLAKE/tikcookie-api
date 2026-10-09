@@ -17,6 +17,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 用户资料实现。
@@ -36,6 +40,15 @@ public class UserServiceImpl implements UserService {
             throw new BizException(UserErrorCode.USER_NOT_FOUND);
         }
         return toUserVO(user);
+    }
+
+    @Override
+    public Map<Long, User> getUsersByIds(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        return userMapper.selectBatchIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
     }
 
     @Override

@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 内部：录入商品、上下架（请求头 X-Internal-Key）。接口文档 5.8.3–5.8.5。
+ * 内部：录入商品、上下架（请求头 X-Internal-Key）。接口文档 5.9.3–5.9.5。
  */
 @Tag(name = "内部：商品")
 @RestController

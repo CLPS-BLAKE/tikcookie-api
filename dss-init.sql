@@ -126,5 +126,26 @@ CREATE TABLE IF NOT EXISTS `favorites` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='店铺与商品收藏';
 
+-- 6. 评价：一笔订单最多一条（唯一索引 uk_reviews_order）；订单核销（USED）后才能评价。
+CREATE TABLE IF NOT EXISTS `reviews` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '评价ID',
+  `order_id` BIGINT NOT NULL COMMENT '订单ID',
+  `user_id` BIGINT NOT NULL COMMENT '评价用户ID',
+  `product_id` BIGINT NOT NULL COMMENT '商品ID',
+  `shop_id` BIGINT NOT NULL COMMENT '店铺ID',
+  `rating` INT NOT NULL COMMENT '评分 1-5',
+  `content` VARCHAR(500) NULL COMMENT '文字评价，可为空',
+  `images` JSON NULL COMMENT '评价图片 ObjectKey 数组，0-3 张',
+  `anonymous` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否匿名',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+    ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_reviews_order` (`order_id`),
+  KEY `idx_reviews_product_created` (`product_id`, `created_at` DESC, `id` DESC),
+  KEY `idx_reviews_shop_created` (`shop_id`, `created_at` DESC, `id` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='订单评价';
+
 -- 初始化后可手工执行：SHOW TABLES; SHOW CREATE TABLE orders;
 -- 注意：CREATE TABLE IF NOT EXISTS 不会自动修改已经存在的旧表。
