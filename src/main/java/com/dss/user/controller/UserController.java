@@ -11,14 +11,17 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 当前用户资料。接口文档 5.1.4–5.1.5。
+ * 当前用户资料。接口文档 5.1.4–5.1.6。
  */
 @Tag(name = "用户")
 @RestController
@@ -39,5 +42,13 @@ public class UserController {
     @PutMapping("/me")
     public Result<UserVO> updateMe(@Valid @RequestBody UpdateProfileDTO dto) {
         return Result.ok(userService.updateProfile(UserContext.requireUserId(), dto));
+    }
+
+    @Operation(summary = "更新头像（上传图片）",
+            description = "multipart/form-data，字段 file；只接受 jpg/png/webp，最大 5MB。"
+                    + "后端把图片存进 OSS，再把 fileId 写进用户资料，返回最新资料（含 avatarUrl，可直接回填头像框）；旧头像不删除")
+    @PutMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<UserVO> updateAvatar(@RequestPart("file") MultipartFile file) {
+        return Result.ok(userService.updateAvatar(UserContext.requireUserId(), file));
     }
 }

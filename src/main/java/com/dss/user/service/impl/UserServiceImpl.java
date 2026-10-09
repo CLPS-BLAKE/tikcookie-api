@@ -5,6 +5,7 @@ import com.dss.common.constant.RedisKeys;
 import com.dss.common.context.LoginUser;
 import com.dss.common.context.UserContext;
 import com.dss.common.exception.BizException;
+import com.dss.common.file.FileStorageService;
 import com.dss.common.file.FileUrlResolver;
 import com.dss.user.mapper.UserMapper;
 import com.dss.user.model.dto.UpdateProfileDTO;
@@ -15,6 +16,7 @@ import com.dss.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 
@@ -28,6 +30,8 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
     private final FileUrlResolver fileUrlResolver;
+    /** 上传能力在 common 包（实现在 file 包）：user 模块不 import file 包也能收图存 OSS。 */
+    private final FileStorageService fileStorageService;
 
     @Override
     public UserVO getCurrentUser(Long userId) {
@@ -71,6 +75,20 @@ public class UserServiceImpl implements UserService {
         }
         syncLoginState(user);
         return toUserVO(user);
+    }
+
+    @Override
+    public UserVO updateAvatar(Long userId, MultipartFile file) {
+        // 先确认用户存在，否则等于给一个无效用户白传一张图进 OSS（token 有效时正常到不了这里）
+        if (userMapper.selectById(userId) == null) {
+            throw new BizException(UserErrorCode.USER_NOT_FOUND);
+        }
+        // 收图 → 存 OSS → 拿 fileId；校验或上传失败会抛 106001–106004，此时数据库不动
+        String fileId = fileStorageService.uploadImage(file);
+        // 复用改资料：写库、同步 Redis 登录态、拼 avatarUrl 都在那里；旧头像对象不删（教学版允许存在）
+        UpdateProfileDTO dto = new UpdateProfileDTO();
+        dto.setAvatar(fileId);
+        return updateProfile(userId, dto);
     }
 
     /**
