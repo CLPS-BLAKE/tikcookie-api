@@ -44,7 +44,7 @@ spring:
     listener:
       simple:
         acknowledge-mode: auto
-        # 重试用完后不重新入队，进死信队列 dss.search.dlq
+        # 重试用完后不重新入队；死信绑定由使用 MQ 的业务队列定义，搜索不声明队列
         default-requeue-rejected: false
         retry:
           enabled: true
@@ -105,7 +105,7 @@ dss:
     order-timeout-interval: ${DSS_JOB_ORDER_TIMEOUT_INTERVAL:PT1M}
     voucher-expire-interval: ${DSS_JOB_VOUCHER_EXPIRE_INTERVAL:PT1M}
   search:
-    # 为 true 时，启动后清空并从 MySQL 全量重建两个 ES 索引；只给部署方用
+    # Logstash 唯一写入方：必须保持 false。误设 true 时明确启动失败，不执行删索引。
     rebuild-on-startup: ${DSS_SEARCH_REBUILD_ON_STARTUP:false}
 
 logging:

@@ -29,11 +29,11 @@
 
 ## 3. 应用与 RabbitMQ 边界
 
-Java `searchProducts/searchShops/sync/rebuildAll` 仍是原代码基线中的桩。Logstash 同步成功不等于两个搜索 API 或页面搜索已可用。
+2026-10-08 本地功能分支已实现 Java searchProducts/searchShops，两公开接口只读 ES；只读真实 ES 联调和搜索 MQ 隔离验证见 [SEARCH_API.md](SEARCH_API.md)。本地验证不是线上应用已更新的证明，也不代表页面搜索已接入。
 
-RabbitMQ 发布器、队列与消费者入口保留，消费同步未完成，不能记为 RabbitMQ → ES 已验收；其异常/死信仍需处理。订单与库存以 MySQL 为准。将来启用 Java/MQ 写 ES 前需明确切换与唯一写入方，避免与 Logstash 相互覆盖。
+用户澄清仅搜索不使用 RabbitMQ，其他业务仍需通用消息队列：保留 DSS_RABBIT_* 连接配置、RabbitAutoConfiguration 和 RabbitCommonConfig 的 JSON/confirm/return 能力。仅 SearchMqConfig/SearchSyncConsumer 不注册；Spring 创建的 SearchSyncPublisher 无操作，不投递搜索消息、不注册搜索事务回调。保留的手工搜索 MQ 辅助代码和历史测试不代表启用搜索链路。旧搜索队列/消息不会被本应用消费或删除，需部署方单独评估处置；不关闭服务器 RabbitMQ 或阻碍其他业务的队列/消费者。
 
-`DSS_SEARCH_REBUILD_ON_STARTUP=false` 保持关闭，不能用未实现的 Java 入口恢复索引。故障补偿需先修复原因，再停机维护重置 JDBC 游标或临时 `clean_run => true` 从 MySQL 全量覆盖，完成后恢复增量配置；这不是删除并重建索引。物理删除残留、错误 mapping 须备份并另行维护。禁止 `down -v` 清空业务卷。
+Java sync/rebuildAll 显式拒绝执行，不写入/删除索引。DSS_SEARCH_REBUILD_ON_STARTUP=false 必须保持关闭，误设 true 会明确启动失败。故障补偿需先修复原因，再停机维护重置 JDBC 游标或临时 clean_run => true 从 MySQL 全量覆盖，完成后恢复增量配置；这不是删除并重建索引。物理删除残留、错误 mapping 须备份并另行维护。禁止 down -v 清空业务卷。
 
 ## 4. 维护与后续证据
 

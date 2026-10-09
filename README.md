@@ -7,14 +7,11 @@ TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 
 - 后端技术方向：Spring Boot
 - 数据存储：MySQL 8.0（单机 InnoDB） + MyBatis-Plus
 - 缓存：Redis
-- 消息队列：RabbitMQ
-- 商品检索：Elasticsearch
+- 通用消息队列：RabbitMQ
+- 商品检索：Elasticsearch；MySQL → Logstash JDBC → ES 同步
 - 图片存储：阿里云 OSS
 - API 文档：Swagger / OpenAPI
 - 对应前端仓库：[tikcookie-web](https://github.com/CLPS-BLAKE/tikcookie-web)
-
-> 2026-10-08 更新：用户、店铺、商品、订单、公共基础与文件模块已有实现，收藏和搜索待实现。阿里云 ECS 规格为 2 核 4 GB，四种中间件同驻 node1；后端已部署阿里云，Nginx/前端待部署。后端具体实例和是否同驻 node1 待记录，部署不等于联调通过。见 [实现进度](docs/PROGRESS.md)。
-> 同日部署补充：负责人确认 Logstash 已通过 Compose 部署并同步 MySQL → ES，店铺 5/5、商品 30/30，两个索引 mapping 符合配置。Java 搜索 API 和 RabbitMQ 消费同步仍待完成；见 [Logstash 部署记录](docs/LOGSTASH_SYNC.md)。
 
 ## 文档入口
 
@@ -32,7 +29,7 @@ TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 
 
 ## 本地构建
 
-后端是单个 Maven 模块，按业务分包：`com.dss.common`、`user`、`shop`、`product`、`order`、`favorite`、`search`、`file`。用户、店铺、商品、订单、公共基础与文件模块已有业务代码；收藏 4 个接口和搜索 2 个接口仍返回 HTTP 501 / 业务码 50100，搜索同步与全量重建方法也仍是桩。
+后端是单个 Maven 模块，按业务分包：com.dss.common、user、shop、product、order、favorite、search、file。当前本地分支两个搜索接口已实现；查询只读 ES，同步由 Logstash 负责，Java sync/rebuildAll 明确禁止调用，不新增维护 API。其他业务的历史统计见进度文档，不由本次搜索测试证明。
 
 | 项 | 版本 |
 | --- | --- |
@@ -45,7 +42,7 @@ TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 
 | 阿里云 OSS SDK | 3.18.5 |
 | springdoc-openapi | 2.8.17 |
 
-服务端需要 MySQL 8.x 和 Elasticsearch 8.x（与 8.18 客户端兼容），另有 Redis、RabbitMQ 和 OSS。
+服务端需要 MySQL 8.x 和 Elasticsearch 8.x（与 8.18 客户端兼容），另有 Redis、RabbitMQ 和 OSS；索引同步由部署中的 Logstash 负责，RabbitMQ 通用能力和配置仍供其他功能复用。
 
 构建与验证命令（产物是 `target/dss-0.0.1-SNAPSHOT.jar`；CI 使用等效命令 `mvn -B --no-transfer-progress clean verify`）：
 
@@ -55,9 +52,7 @@ mvn -B clean verify
 
 `JAVA_HOME` 必须指向 JDK 21。
 
-当前本地 `src/test` 已有公共契约与上传/消息发布用例，尚未合入核对的远端 main，不能据此声称远端已有测试覆盖。默认用例不依赖中间件；需要真机的两个联调用例
-（`OssFileStorageLiveTest`、`SearchSyncPublisherRabbitLiveTest`）在没有 `.env` 时自动跳过，
-分层说明见 [测试与验收规范](docs/TESTING.md) 第 2 节。
+当前本地 src/test 有公共契约、文件、搜索、完整启动与历史消息用例，未提交的用例不能计入远端覆盖。默认不执行真实中间件测试：SearchApiEsLiveTest 需显式 DSS_ES_LIVE_TEST=true；历史 OSS/MQ 分别需 DSS_OSS_LIVE_TEST=true、DSS_RABBIT_LIVE_TEST=true。即使存在 .env，默认构建也不上传对象或投递 MQ。分层说明见 [测试与验收规范](docs/TESTING.md)。
 
 本地运行：
 
@@ -67,8 +62,8 @@ mvn -B clean verify
    时会自动读取 `.env`**（操作系统环境变量优先级更高，服务器/CI 注入真实变量时不受影响）；用 IDEA 运行时注意把工作目录设成模块目录。
 3. 启动：`java -jar target/dss-0.0.1-SNAPSHOT.jar`，或在 IDEA 里运行 `com.dss.DssApplication`。
 4. 打开 `http://localhost:8080/swagger-ui.html` 查看接口。调用内部接口前，先在 Authorize 里填入 `X-Internal-Key`。
-5. MySQL、Redis、RabbitMQ、ES 的连接均指向 `node1` 的可达私网地址或受控入口；实例名不保证 DNS 可解析，不能把本机 localhost 当作云端中间件地址。
-6. 订单任务默认关闭，先修复并回归到期退款条件，再设置 `DSS_JOB_ENABLED=true`；搜索重建尚未实现，不应提前启用启动重建。
+5. MySQL、Redis、RabbitMQ、ES 的连接指向 node1 的可达私网地址或受控入口；实例名不保证 DNS 可解析，不能把本机 localhost 当作云端中间件地址。保留 DSS_RABBIT_* 和通用 MQ 配置供其他功能使用；仅搜索链路不使用 RabbitMQ。
+6. 订单任务默认关闭，先修复并回归到期退款条件，再设置 DSS_JOB_ENABLED=true；DSS_SEARCH_REBUILD_ON_STARTUP 必须 false，误设 true 会启动失败，不删除索引。
 
 ## 基本协作规则
 
@@ -82,7 +77,7 @@ mvn -B clean verify
 
 ## 当前状态
 
-以 2026-10-08 核对的远端 main `af739da` 为基线：32 个既定业务接口中，26 个已有非桩实现、6 个待实现，另有一个公开代理读图接口。收藏、ES 查询、消息消费后的索引同步与全量重建尚未实现。
+历史远端 af739da 的全模块统计见进度文档。2026-10-08 当前本地功能分支已完成两个 ES 搜索接口，具体证据见 SEARCH_API.md；不把本地完成记为远端已合并或线上已发布。索引只由 Logstash 同步，Java 搜索不使用 MQ 或重建。
 
 后端构建 CI 已配置，但不代表运行结果或测试已通过。到期退款条件存在已登记问题。后端已部署阿里云，实际实例/版本待记录；Nginx/前端部署、真实接口接入、全链路验收和自动发布待完成。2C4G ECS 上的四种中间件同驻 node1；见 [部署约定](docs/DEPLOYMENT.md) 与 [进度待办](docs/PROGRESS.md)。
 

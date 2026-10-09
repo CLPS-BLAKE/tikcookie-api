@@ -3,6 +3,8 @@
 > 2026-10-08（北京时间）更新。基于当天核对的 GitHub main 已合并代码；“已有实现”不等于已通过联调或发布验收。未合并分支、本地未提交修改不计入远端交付。
 > 本文由后端仓库维护，同步到前端仓库；提交后在同步记录中回填后端文档提交号。
 
+> 2026-10-08 本地搜索补充：feat/search-logstash-api 已实现两个公开搜索接口并只读联调真实 ES，搜索链路不使用 RabbitMQ，应用保留通用 RabbitMQ 能力、禁止 Java 同步/重建，见 [SEARCH_API.md](SEARCH_API.md)。尚未提交/合并/发布；下方其他模块的 main 基线和总量统计保留为历史，不表示当前本地搜索仍是桩。
+
 ## 1. 核对基线
 
 | 仓库 | main 提交 | 最新提交时间（北京时间） |
@@ -38,9 +40,9 @@
 | order | 下单、模拟支付、券码、查询、取消、退款、用户“去使用”、超时/到期任务 | 到期退款修复、状态/库存/重复操作回归、任务启用验收 |
 | file | 两个 OSS 上传入口、ObjectKey、URL 转换、公开代理读图 | 头像/店铺/商品绑定与页面展示 |
 | favorite | Controller、DTO、Mapper、实体 | add/remove/list/status 四个方法仍是桩 |
-| search | 索引实体、Repository、消费/重建入口；部署侧 Logstash 已同步两个索引 | Java searchProducts/searchShops/sync/rebuildAll 四个方法仍是桩；查询 API、RabbitMQ 消费及恢复验收未完成 |
+| search（本地分支） | 两个只读搜索 API、DSL/HTTP/搜索 MQ 隔离/完整启动测试、真实 ES 联调 | 待合并发布和前端接入；部署侧增量/重启/故障证据另补；MQ 不在搜索方案，通用 MQ 保留 |
 
-既定 32 个业务接口中，26 个已有非桩实现，6 个未实现（收藏 4 个、搜索 2 个）。同步和重建是 SearchService 的另外两个内部方法，不重复计为公开接口。额外公开读图 `GET /api/v1/images/{fileId}` 不纳入原 32 个业务接口；Controller 合计 33 个 HTTP 映射。此统计不是验收完成率。
+历史 af739da 基线统计为 32 个业务接口中 26 个已有实现、6 个未实现；不是当前功能分支的统计。两个搜索 HTTP 接口本地已完成；sync/rebuildAll 为另两个内部方法，按已选 Logstash 方案禁止执行，不计为待交付公开接口。额外代理读图不纳入原 32 个业务接口。全模块完成率需另行核对，不能从本次搜索测试推断。
 
 主要证据：各模块 `service/impl`、`controller` 及 [接口文档](接口文档.md)。
 
@@ -66,13 +68,13 @@ Vue 3 + Vite + Vant + Vue Router + Axios 工程、锁文件和 `/api` 代理已�
 | P0 | 到期退款条件修复 | 扫描用 `expiresAt <= now`，更新却用 `.gt(...expiresAt, expiredBefore)`；修正后只退到期 UNUSED，重复扫描不重复扣销量 |
 | P0 | 移除登录假成功 | 错误验证码/401/断网保留失败；mock 如保留须显式隔离且联调关闭 |
 | P0 | 真实购买闭环 | 真实商品 ID → 创建订单 → 真实订单 ID → 模拟支付 → 券码 → `/orders/{orderId}/use`；刷新后状态一致 |
-| P1 | 搜索 API 与同步维护 | Logstash 部署/同步已确认；补关键词/筛选/排序/分页，补录增量/重启/故障证据；RabbitMQ 消费仍待完成，未来切换写入方需明确 |
+| P1 | 搜索发布与同步维护 | 本地 API 已落地及只读验收；合并/发布、前端接入另做；Logstash 增量/重启/故障证据另补；不使用 RabbitMQ |
 | P1 | 收藏 | 增删/列表/状态，重复操作、权限和无效目标符合业务码 |
 | P1 | 订单与资料 | 状态筛选、取消/退款、依据 payDeadline 倒计时、资料/头像/退出 |
 | 验收前 | 测试及任务 | 32 个接口无 501；覆盖库存/限购/状态与失败分支；任务修复后启用并实测 |
 | 验收前 | 部署及发布 | 记录已部署后端的实例/版本；部署 Nginx 和前端；补 Dockerfile/Compose、CI/CD、持久化、健康检查、备份/回退与版本记录 |
 
-P0/P1 仅决定顺序，搜索和收藏仍必须交付。到期退款问题位于 `OrderServiceImpl#refundExpiredVouchers`、`#transitionToRefunded`、`#refundExpiredOne`，本次仅登记，不修复代码。订单任务默认关闭；修复并回归后配置 `DSS_JOB_ENABLED=true`。搜索重建入口已有，但 rebuildAll 未实现，不能把启用启动重建当作恢复能力已可用。
+P0/P1 仅决定顺序，搜索和收藏仍必须交付。到期退款问题位于 OrderServiceImpl#refundExpiredVouchers、#transitionToRefunded、#refundExpiredOne，本次不修复订单代码。订单任务默认关闭。搜索索引由 Logstash 管理，Java rebuildAll 明确禁止；不得启用启动重建作为恢复方式。
 
 ## 6. 测试与发布边界
 

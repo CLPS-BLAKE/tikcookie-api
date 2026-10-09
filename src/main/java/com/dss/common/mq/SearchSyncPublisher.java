@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -12,10 +13,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.UUID;
 
 /**
- * 发送搜索同步消息到 dss.search.direct。放在 common 里，供 shop / product 包调用。
- * 发送失败只记日志、不向调用方抛异常：此时 MySQL 已经提交，把异常抛出去会让业务方以为整个操作失败，
- * 而消息丢失由部署方跑一次全量重建（dss.search.rebuild-on-startup）补偿，不引入 outbox。
- * 消息只带类型和 ID，消费者自己查 MySQL 当前值，所以重复或乱序都不会写错。
+ * 兼容 shop/product 的变更通知调用。Spring 创建的实例无操作，索引同步交给 Logstash。
+ * 显式 RabbitTemplate 构造路径仅保留为历史 MQ 辅助代码，不是当前应用的同步方案。
  */
 @Slf4j
 @Component
@@ -24,21 +23,30 @@ public class SearchSyncPublisher {
 
     private final RabbitTemplate rabbitTemplate;
 
+    /** Spring 明确选择此构造器，不依赖 RabbitTemplate，也不注册事务消息回调。 */
+    @Autowired
+    public SearchSyncPublisher() {
+        this.rabbitTemplate = null;
+    }
+
     /**
-     * 店铺新增或修改后调用：发 shop.changed，消息体 {type: SHOP, id: shopId}。
+     * 店铺变更兼容通知：应用实例无操作；仅历史手工 MQ 实例投递 shop.changed。
      */
     public void publishShopChanged(Long shopId) {
         publishAfterCommit(DocType.SHOP, MqNames.SHOP_CHANGED_ROUTING_KEY, shopId);
     }
 
     /**
-     * 商品新增、修改、上下架、已售数变化后调用：发 product.changed，消息体 {type: PRODUCT, id: productId}。
+     * 商品变更兼容通知：应用实例无操作；仅历史手工 MQ 实例投递 product.changed。
      */
     public void publishProductChanged(Long productId) {
         publishAfterCommit(DocType.PRODUCT, MqNames.PRODUCT_CHANGED_ROUTING_KEY, productId);
     }
 
     private void publishAfterCommit(DocType type, String routingKey, Long id) {
+        if (rabbitTemplate == null) {
+            return;
+        }
         if (id == null) {
             log.warn("搜索同步消息未发送：type={} 的 id 为空，调用方应先保存数据再传真实主键", type);
             return;
