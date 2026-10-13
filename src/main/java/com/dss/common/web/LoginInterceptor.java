@@ -20,7 +20,7 @@ import java.util.Map;
 /**
  * 登录拦截器（已实现）：
  * 校验请求头 {@code Authorization: Bearer <token>}，从 Redis 取登录态放进 {@link UserContext}，
- * 并把有效期续满（滑动过期）。公开接口和内部接口不经过它，见 {@link WebMvcConfig}。
+ * 并把有效期续满（滑动过期）。公开商品详情仅在携带 token 时通过可选登录调用，见 {@link WebMvcConfig}。
  */
 @Component
 @RequiredArgsConstructor

@@ -75,6 +75,12 @@ springdoc:
     path: /swagger-ui.html
 
 dss:
+  flash:
+    # Enabled startup appends demo products; tests must explicitly disable it.
+    enabled: ${DSS_FLASH_ENABLED:true}
+    mq-prefix: ${DSS_FLASH_MQ_PREFIX:dss.flash}
+    lifecycle-interval: ${DSS_FLASH_LIFECYCLE_INTERVAL:PT1S}
+    request-timeout-interval: ${DSS_FLASH_REQUEST_TIMEOUT_INTERVAL:PT1S}
   internal:
     # 内部接口口令；为空时内部接口一律拒绝
     key: ${DSS_INTERNAL_KEY:}
@@ -101,7 +107,7 @@ dss:
     pay-timeout-minutes: ${DSS_ORDER_PAY_TIMEOUT_MINUTES:15}
   job:
     # 订单定时任务；实现完再打开，否则桩方法每分钟报错。单实例执行，不加锁
-    enabled: ${DSS_JOB_ENABLED:false}
+    enabled: ${DSS_JOB_ENABLED:true}
     order-timeout-interval: ${DSS_JOB_ORDER_TIMEOUT_INTERVAL:PT1M}
     voucher-expire-interval: ${DSS_JOB_VOUCHER_EXPIRE_INTERVAL:PT1M}
   search:

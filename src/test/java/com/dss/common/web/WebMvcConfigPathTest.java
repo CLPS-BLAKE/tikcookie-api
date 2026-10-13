@@ -98,13 +98,13 @@ class WebMvcConfigPathTest {
     }
 
     @Test
-    @DisplayName("注册两个拦截器：登录拦 /api/v1/**，内部口令拦 /api/v1/internal/**")
+    @DisplayName("注册登录、内部口令及公开商品的可选登录拦截器")
     void registersBothInterceptors() {
         ExposedRegistry registry = new ExposedRegistry();
 
         new WebMvcConfig(mock(LoginInterceptor.class), mock(InternalKeyInterceptor.class)).addInterceptors(registry);
 
-        assertThat(registry.registered()).hasSize(2);
+        assertThat(registry.registered()).hasSize(3);
     }
 
     private boolean isPublic(String path) {

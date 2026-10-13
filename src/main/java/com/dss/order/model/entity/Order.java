@@ -21,8 +21,8 @@ import java.time.LocalDateTime;
 @TableName("orders")
 public class Order {
 
-    /** 订单 ID，MySQL 自增。 */
-    @TableId(type = IdType.AUTO)
+    /** 订单 ID，由统一后端雪花生成器赋值；保留历史 ID 和现有数据库结构。 */
+    @TableId(type = IdType.INPUT)
     private Long id;
 
     private Long userId;

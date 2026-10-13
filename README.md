@@ -2,6 +2,8 @@
 
 TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 API、中间件集成、数据持久化以及共享部署配置。
 
+> 2026-10-13 当前工作区更新：抢购闭环已实现，普通商品同步下单，FLASH 走 Redis 预占 → RabbitMQ → MySQL 异步建单；支持本人结果查询、个人限购、模拟支付、取消回补和超时处理。此说明不表示已合并或线上已发布。抢购读者请优先使用下方专门文档，旧日期记录只代表当时状态。
+
 ## 项目定位
 
 - 后端技术方向：Spring Boot
@@ -15,6 +17,8 @@ TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 
 
 ## 文档入口
 
+- [抢购用户使用指南（普通用户）](docs/FLASH_SALE_USER_GUIDE.md)
+- [抢购系统技术说明（设计、流程、边界与验收）](docs/FLASH_SALE.md)
 - [贡献指南](CONTRIBUTING.md)
 - [项目与架构说明](docs/PROJECT_GUIDE.md)
 - [实现进度与优先待办](docs/PROGRESS.md)
@@ -63,7 +67,7 @@ mvn -B clean verify
 3. 启动：`java -jar target/dss-0.0.1-SNAPSHOT.jar`，或在 IDEA 里运行 `com.dss.DssApplication`。
 4. 打开 `http://localhost:8080/swagger-ui.html` 查看接口。调用内部接口前，先在 Authorize 里填入 `X-Internal-Key`。
 5. MySQL、Redis、RabbitMQ、ES 的连接指向 node1 的可达私网地址或受控入口；实例名不保证 DNS 可解析，不能把本机 localhost 当作云端中间件地址。保留 DSS_RABBIT_* 和通用 MQ 配置供其他功能使用；仅搜索链路不使用 RabbitMQ。
-6. 订单任务默认关闭，先修复并回归到期退款条件，再设置 DSS_JOB_ENABLED=true；DSS_SEARCH_REBUILD_ON_STARTUP 必须 false，误设 true 会启动失败，不删除索引。
+6. 当前工作区 DSS_FLASH_ENABLED 与 DSS_JOB_ENABLED 默认均为 true，但旧环境文件可覆盖默认值；启动抢购会追加新轮，先按 [抢购技术说明](docs/FLASH_SALE.md) 确认演示店铺、环境隔离及旧 timer 停用。订单扫描用于支付超时及券到期退款兜底，演示部署应显式确认 DSS_JOB_ENABLED=true。DSS_SEARCH_REBUILD_ON_STARTUP 必须 false，误设 true 会启动失败，不删除索引。
 
 ## 基本协作规则
 
@@ -79,5 +83,5 @@ mvn -B clean verify
 
 历史远端 af739da 的全模块统计见进度文档。2026-10-08 当前本地功能分支已完成两个 ES 搜索接口，具体证据见 SEARCH_API.md；不把本地完成记为远端已合并或线上已发布。索引只由 Logstash 同步，Java 搜索不使用 MQ 或重建。
 
-后端构建 CI 已配置，但不代表运行结果或测试已通过。到期退款条件存在已登记问题。后端已部署阿里云，实际实例/版本待记录；Nginx/前端部署、真实接口接入、全链路验收和自动发布待完成。2C4G ECS 上的四种中间件同驻 node1；见 [部署约定](docs/DEPLOYMENT.md) 与 [进度待办](docs/PROGRESS.md)。
+后端构建 CI 已配置，但不代表本次运行结果或测试已通过。当前本地抢购实现包含到期退款条件处理，既有本地验收记录与待发布项目见 [抢购技术说明](docs/FLASH_SALE.md)，不沿用旧待办推断当前源码。后端曾部署阿里云，实际实例/版本待记录；当前抢购构建物、Nginx/前端及真实环境全链路验收仍须按部署流程确认。2C4G ECS 上的四种中间件同驻 node1 的历史记录见 [部署约定](docs/DEPLOYMENT.md) 与 [进度待办](docs/PROGRESS.md)。
 

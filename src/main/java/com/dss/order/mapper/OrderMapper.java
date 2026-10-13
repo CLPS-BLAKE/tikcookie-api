@@ -3,6 +3,8 @@ package com.dss.order.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.dss.order.model.entity.Order;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Param;
 
 /**
  * orders 表，全部用 BaseMapper + Lambda 条件构造器，用到的索引：
@@ -16,4 +18,6 @@ import org.apache.ibatis.annotations.Mapper;
  */
 @Mapper
 public interface OrderMapper extends BaseMapper<Order> {
+    @Select("SELECT * FROM orders WHERE id=#{id} FOR UPDATE")
+    Order selectByIdForUpdate(@Param("id") Long id);
 }

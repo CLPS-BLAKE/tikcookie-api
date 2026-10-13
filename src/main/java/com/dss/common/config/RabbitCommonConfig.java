@@ -27,7 +27,7 @@ public class RabbitCommonConfig {
      */
     @Bean
     public MessageConverter jsonMessageConverter(ObjectMapper objectMapper) {
-        return new Jackson2JsonMessageConverter(objectMapper, "com.dss.common.mq");
+        return new Jackson2JsonMessageConverter(objectMapper, "com.dss.common.mq", "com.dss.flash.mq");
     }
 
     /** 通用投递回调：记录未确认或未路由的消息；重试/补偿由使用 MQ 的业务自行定义。 */

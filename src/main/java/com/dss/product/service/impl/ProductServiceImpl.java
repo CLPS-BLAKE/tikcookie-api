@@ -7,6 +7,8 @@ import com.dss.common.error.CommonErrorCode;
 import com.dss.common.file.FileUrlResolver;
 import com.dss.common.mq.SearchSyncPublisher;
 import com.dss.common.result.PageResult;
+import com.dss.flash.service.FlashCacheService;
+import com.dss.flash.service.FlashRequestCoordinator;
 import com.dss.product.mapper.ProductMapper;
 import com.dss.product.model.dto.ProductFeedQuery;
 import com.dss.product.model.dto.ProductSaveDTO;
@@ -24,6 +26,9 @@ import com.dss.shop.service.ShopService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import java.time.Clock;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -42,13 +47,26 @@ import java.util.stream.Collectors;
  * 它们必须跑在调用方（订单）的事务里。
  */
 @Service
-@RequiredArgsConstructor
 public class ProductServiceImpl implements ProductService {
 
     private final ProductMapper productMapper;
     private final ShopService shopService;
     private final SearchSyncPublisher searchSyncPublisher;
     private final FileUrlResolver fileUrlResolver;
+    private final FlashCacheService flashCache;
+    private final FlashRequestCoordinator coordinator;
+    private final TransactionTemplate transactions;
+    private final Clock clock;
+
+    public ProductServiceImpl(ProductMapper productMapper, ShopService shopService,
+                              SearchSyncPublisher searchSyncPublisher, FileUrlResolver fileUrlResolver,
+                              FlashCacheService flashCache, FlashRequestCoordinator coordinator,
+                              PlatformTransactionManager transactionManager, Clock clock) {
+        this.productMapper=productMapper; this.shopService=shopService;
+        this.searchSyncPublisher=searchSyncPublisher; this.fileUrlResolver=fileUrlResolver;
+        this.flashCache=flashCache; this.coordinator=coordinator;
+        this.transactions=new TransactionTemplate(transactionManager); this.clock=clock;
+    }
 
     // ---------- 公开查询 ----------
 
@@ -57,6 +75,7 @@ public class ProductServiceImpl implements ProductService {
         Shop shop = shopService.getRequiredShop(shopId);
         List<Product> products = productMapper.selectList(Wrappers.<Product>lambdaQuery()
                 .eq(Product::getShopId, shopId)
+                .eq(Product::getType, ProductType.NORMAL)
                 .eq(Product::getStatus, ProductStatus.ON_SHELF)
                 .orderByDesc(Product::getCreatedAt)
                 .orderByDesc(Product::getId));
@@ -65,7 +84,17 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductVO getProduct(Long productId) {
+        return getProduct(productId, null);
+    }
+
+    @Override
+    public ProductVO getProduct(Long productId, Long userId) {
+        if (flashCache.knowsFlash(productId)) return userId == null ? flashCache.detail(productId) : flashCache.detail(productId, userId);
         Product product = getRequiredProduct(productId);
+        if (product.getType() == ProductType.FLASH) {
+            flashCache.registerType(productId);
+            return userId == null ? flashCache.detail(productId) : flashCache.detail(productId, userId);
+        }
         if (product.getStatus() != ProductStatus.ON_SHELF) {
             throw new BizException(ProductErrorCode.PRODUCT_OFF_SHELF);
         }
@@ -74,7 +103,8 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public PageResult<ProductCardVO> listFeed(ProductFeedQuery query) {
-        var wrapper = Wrappers.<Product>lambdaQuery().eq(Product::getStatus, ProductStatus.ON_SHELF);
+        var wrapper = Wrappers.<Product>lambdaQuery().eq(Product::getStatus, ProductStatus.ON_SHELF)
+                .eq(Product::getType, ProductType.NORMAL);
         if (FeedSort.SALES == FeedSort.fromCode(query.getSort())) {
             wrapper.orderByDesc(Product::getSoldCount).orderByDesc(Product::getId);
         } else {
@@ -86,36 +116,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public List<FlashProductVO> listFlash() {
-        LocalDateTime now = LocalDateTime.now();
-        List<Product> products = productMapper.selectList(Wrappers.<Product>lambdaQuery()
-                .eq(Product::getType, ProductType.FLASH)
-                .eq(Product::getStatus, ProductStatus.ON_SHELF)
-                .gt(Product::getFlashEndTime, now)
-                .orderByAsc(Product::getFlashStartTime)
-                .orderByAsc(Product::getId));
-        if (products.isEmpty()) {
-            return List.of();
-        }
-        Map<Long, Shop> shops = loadShops(products);
-        List<FlashProductVO> list = new ArrayList<>(products.size());
-        for (Product product : products) {
-            Shop shop = shops.get(product.getShopId());
-            FlashProductVO vo = new FlashProductVO();
-            vo.setId(String.valueOf(product.getId()));
-            vo.setShopId(String.valueOf(product.getShopId()));
-            vo.setShopName(shop == null ? null : shop.getName());
-            vo.setName(product.getName());
-            vo.setPrice(product.getPrice());
-            vo.setImageUrl(fileUrlResolver.toUrl(product.getImage()));
-            // 剩余库存以 MySQL products.stock 为准，展示时可能随并发下单变化
-            vo.setRemainingStock(product.getStock());
-            vo.setFlashStartTime(product.getFlashStartTime());
-            vo.setFlashEndTime(product.getFlashEndTime());
-            vo.setLimitPerUser(product.getLimitPerUser());
-            vo.setOngoing(product.getFlashStartTime() != null && !now.isBefore(product.getFlashStartTime()));
-            list.add(vo);
-        }
-        return list;
+        return flashCache.list();
     }
 
     // ---------- 内部录入 ----------
@@ -136,19 +137,33 @@ public class ProductServiceImpl implements ProductService {
         product.setValidDays(dto.getValidDays());
         product.setUseRules(dto.getUseRules());
         // 新建后直接上架；已售数从 0 开始
-        product.setStatus(ProductStatus.ON_SHELF);
+        product.setStatus(dto.getType()==ProductType.FLASH ? ProductStatus.OFF_SHELF : ProductStatus.ON_SHELF);
         product.setSoldCount(0);
         applyFlashFields(product, dto);
         productMapper.insert(product);
 
-        searchSyncPublisher.publishProductChanged(product.getId());
+        if (product.getType()==ProductType.FLASH) flashCache.registerType(product.getId());
+        else searchSyncPublisher.publishProductChanged(product.getId());
         return toProductVO(product, shopService.getRequiredShop(shopId));
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public ProductVO updateProduct(Long productId, ProductSaveDTO dto) {
-        Product current = getRequiredProduct(productId);
+        return coordinator.locked(productId, () -> {
+            Product updated=transactions.execute(status -> doUpdateProduct(productId,dto));
+            Shop shop=shopService.getRequiredShop(updated.getShopId());
+            if (updated.getType()==ProductType.FLASH && flashCache.isCurrent(productId)) {
+                try {
+                    flashCache.configureBeforeStartStock(productId,updated.getStock());
+                    flashCache.refresh(updated,shop);
+                } catch (RuntimeException e) { flashCache.pause(productId); throw e; }
+            }
+            return toProductVO(updated,shop);
+        });
+    }
+
+    private Product doUpdateProduct(Long productId, ProductSaveDTO dto) {
+        Product current = lockProduct(productId);
         Long shopId = parseId(dto.getShopId(), "shopId");
         if (current.getType() != dto.getType()) {
             throw new BizException(ProductErrorCode.PRODUCT_TYPE_IMMUTABLE);
@@ -169,26 +184,43 @@ public class ProductServiceImpl implements ProductService {
         update.setValidDays(dto.getValidDays());
         update.setUseRules(dto.getUseRules());
         applyFlashFields(update, dto);
-        // 抢购已经开始后，库存、限购和时间窗被锁住（103007）；上下架、名称、价格、图不受限制
+        // 达到开始时间后全资料冻结；商品行锁防止人工编辑覆盖并发库存。
         if (current.getType() == ProductType.FLASH && flashLocked(current, update)) {
             throw new BizException(ProductErrorCode.FLASH_STARTED_LOCKED);
         }
         // soldCount 不在这里改：它只由订单的支付（+1）和退款（−1）维护
         productMapper.updateById(update);
 
-        searchSyncPublisher.publishProductChanged(productId);
-        return toProductVO(getRequiredProduct(productId), shopService.getRequiredShop(shopId));
+        if (current.getType()==ProductType.NORMAL) searchSyncPublisher.publishProductChanged(productId);
+        return getRequiredProduct(productId);
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public void changeStatus(Long productId, ProductStatus status) {
-        getRequiredProduct(productId);
-        Product update = new Product();
-        update.setId(productId);
-        update.setStatus(status);
-        productMapper.updateById(update);
-        searchSyncPublisher.publishProductChanged(productId);
+        coordinator.locked(productId, () -> {
+            Product product=transactions.execute(tx -> {
+                Product p=lockProduct(productId);
+                if (p.getType()==ProductType.FLASH && status==ProductStatus.ON_SHELF) {
+                    LocalDateTime now=LocalDateTime.now(clock);
+                    if (!flashCache.isCurrent(productId) || !flashCache.cacheReady(productId)) throw FlashCacheService.unavailable();
+                    if (p.getFlashStartTime()==null || now.isBefore(p.getFlashStartTime())) throw new BizException(ProductErrorCode.FLASH_NOT_STARTED);
+                    if (p.getFlashEndTime()==null || !now.isBefore(p.getFlashEndTime())) throw new BizException(ProductErrorCode.FLASH_ENDED);
+                }
+                Product update=new Product(); update.setId(productId); update.setStatus(status); productMapper.updateById(update);
+                p.setStatus(status);
+                if (p.getType()==ProductType.NORMAL) searchSyncPublisher.publishProductChanged(productId);
+                return p;
+            });
+            if (product.getType()==ProductType.FLASH) {
+                try {
+                    if (flashCache.cacheReady(productId)) {
+                        if (product.getFlashStartTime()!=null && !LocalDateTime.now(clock).isBefore(product.getFlashStartTime())) flashCache.markAutoShelfDone(productId);
+                        flashCache.refresh(product,shopService.getRequiredShop(product.getShopId()));
+                    }
+                } catch (RuntimeException e) { flashCache.pause(productId); throw e; }
+            }
+            return null;
+        });
     }
 
     // ---------- 供其他包调用 ----------
@@ -269,17 +301,14 @@ public class ProductServiceImpl implements ProductService {
         product.setLimitPerUser(dto.getLimitPerUser() == null ? 1 : dto.getLimitPerUser());
     }
 
-    /** 抢购已开始且库存 / 限购 / 时间窗有变化时返回 true。 */
+    /** 达到开始时间后，任何人工资料编辑都禁止。 */
     private boolean flashLocked(Product current, Product update) {
         boolean started = current.getFlashStartTime() != null
-                && !LocalDateTime.now().isBefore(current.getFlashStartTime());
+                && !LocalDateTime.now(clock).isBefore(current.getFlashStartTime());
         if (!started) {
             return false;
         }
-        return !Objects.equals(current.getStock(), update.getStock())
-                || !Objects.equals(current.getLimitPerUser(), update.getLimitPerUser())
-                || !Objects.equals(current.getFlashStartTime(), update.getFlashStartTime())
-                || !Objects.equals(current.getFlashEndTime(), update.getFlashEndTime());
+        return true;
     }
 
     private Long parseId(String raw, String field) {

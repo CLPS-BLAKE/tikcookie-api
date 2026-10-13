@@ -2,6 +2,7 @@ package com.dss.product.controller;
 
 import com.dss.common.result.PageResult;
 import com.dss.common.result.Result;
+import com.dss.common.context.UserContext;
 import com.dss.product.model.dto.ProductFeedQuery;
 import com.dss.product.model.vo.FlashProductVO;
 import com.dss.product.model.vo.ProductCardVO;
@@ -37,10 +38,11 @@ public class ProductController {
         return Result.ok(productService.listShopProducts(shopId));
     }
 
-    @Operation(summary = "商品详情（公开）", description = "抢购商品带剩余库存（以 MySQL 为准）")
+    @Operation(summary = "商品详情（公开）", description = "抢购库存与登录用户购买额度取 Redis；达到个人上限仍可浏览")
     @GetMapping("/products/{productId}")
     public Result<ProductVO> detail(@PathVariable Long productId) {
-        return Result.ok(productService.getProduct(productId));
+        var user = UserContext.get();
+        return Result.ok(productService.getProduct(productId, user == null ? null : user.getUserId()));
     }
 
     @Operation(summary = "首页商品流（公开）", description = "sort=latest（默认）按创建时间倒序，sort=sales 按已售数倒序")
