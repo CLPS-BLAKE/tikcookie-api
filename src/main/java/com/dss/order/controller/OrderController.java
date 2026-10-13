@@ -10,6 +10,8 @@ import com.dss.order.model.vo.OrderCreatedVO;
 import com.dss.order.model.vo.OrderListItemVO;
 import com.dss.order.model.vo.OrderVO;
 import com.dss.order.service.OrderService;
+import com.dss.flash.service.FlashOrderService;
+import com.dss.flash.model.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrderController {
 
     private final OrderService orderService;
+    private final FlashOrderService flashOrderService;
 
     @Operation(summary = "普通商品下单", description = "同步创建待支付订单，15 分钟内要支付")
     @PostMapping
@@ -41,10 +44,15 @@ public class OrderController {
         return Result.ok(orderService.createOrder(UserContext.requireUserId(), dto));
     }
 
-    @Operation(summary = "抢购下单", description = "一个 MySQL 事务里锁商品、校验时间窗 / 库存 / 限购、扣库存并生成订单；返回的订单 ID 立即可查")
+    @Operation(summary = "抢购下单", description = "Redis 原子预占后返回 PROCESSING；MQ 异步建单，使用本人结果接口查询 CREATED 后再取订单详情")
     @PostMapping("/flash")
-    public Result<OrderCreatedVO> createFlash(@Valid @RequestBody CreateOrderDTO dto) {
-        return Result.ok(orderService.createFlashOrder(UserContext.requireUserId(), dto));
+    public Result<FlashAcceptedVO> createFlash(@Valid @RequestBody FlashOrderDTO dto) {
+        return Result.ok(flashOrderService.submit(UserContext.requireUserId(), dto));
+    }
+
+    @GetMapping("/flash/result/{orderId}")
+    public Result<FlashResultVO> flashResult(@PathVariable Long orderId) {
+        return Result.ok(flashOrderService.result(UserContext.requireUserId(),orderId));
     }
 
     @Operation(summary = "模拟支付", description = "调用即成功；订单变为待使用并生成 12 位券码")

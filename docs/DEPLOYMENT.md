@@ -1,5 +1,8 @@
 # 部署职责与目录约定
 
+
+> 2026-10-13 秒杀改造更新：普通订单同步、FLASH Redis 预占 + MQ 异步建单，所有新订单应用雪花 ID；新增本人建单结果接口。开抢后全资料冻结；启动追加新轮，不清历史。最新接口/配置/部署/测试及单实例故障边界以 [FLASH_SALE.md](FLASH_SALE.md) 为准；下文旧日期部署记录保留为历史，不能据其推断新分支已发布。
+
 ## 1. 已确认部署事实与目标方案（2026-10-08）
 
 部署负责人已确认 ECS 规格为 **2 核 4 GB（2C4G）**，MySQL、Redis、Elasticsearch、RabbitMQ 同驻 node1；**后端已部署在阿里云，Nginx 和前端等待部署**。2026-10-08 补充确认：服务器 `/opt/tikcookie-data` 已使用 Compose 部署 Logstash 并完成 MySQL → ES 同步，店铺 5/5、商品 30/30，两个索引的 mapping 符合配置。后端具体实例、是否同驻 node1、实际部署版本/运行方式/端口待记录；中间件 Compose 不证明应用也用 Compose，Kubernetes 不作为本期验收要求。

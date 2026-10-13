@@ -15,28 +15,29 @@ import com.dss.order.model.vo.OrderVO;
  *     <li>状态迁移都用带原状态条件的 UPDATE（id + status = 原状态），更新行数不为 1 就按状态不符处理，
  *     重复点击、定时任务重复处理都不会重复加减；</li>
  *     <li>不是本人的订单一律按"不存在"处理（104001）；</li>
- *     <li>RabbitMQ 不参与订单的正确性，已售数变化只在提交后通知搜索（product.changed）。</li>
+ *     <li>抢购由独立 MQ 消费者持商品协调锁调用事务建单；普通订单保持同步，搜索消息不发布。</li>
  * </ul>
  */
 public interface OrderService {
 
     /**
      * 普通商品下单：商品不存在 103001、已下架 103002、是 FLASH 103013；
-     * 插入 UNPAID 订单（ID 自增；写 4 个快照字段；amount = price；payDeadline = 现在 + dss.order.pay-timeout-minutes）。
+     * 插入 UNPAID 订单（统一雪花 ID；写快照；amount = price；payDeadline = 创建时间 + 配置分钟数）。
      */
     OrderCreatedVO createOrder(Long userId, CreateOrderDTO dto);
 
     /**
-     * 抢购下单，在一个短事务里完成，提交后返回的订单 ID 立即可查：
+     * 仅供已预占请求的消费者在协调锁和已有事务中调用，不是 HTTP 受理入口：
      * <ol>
      *     <li>ProductService.lockProduct 锁商品行（SELECT … FOR UPDATE）；不存在 103001、已下架 103002、不是 FLASH 103012；</li>
      *     <li>未开始 103008、已结束 103009；</li>
      *     <li>该用户在这个商品上未取消的订单数（UNPAID / UNUSED / USED / REFUNDED）≥ limitPerUser：103011；</li>
      *     <li>ProductService.decreaseFlashStock 返回 false：103010；</li>
-     *     <li>插入 UNPAID 订单（同普通下单）。</li>
+     *     <li>插入指定原 orderId 的 UNPAID 订单，并在提交前重新检查 queueDeadline。</li>
      * </ol>
      */
-    OrderCreatedVO createFlashOrder(Long userId, CreateOrderDTO dto);
+    Order createReservedFlashOrder(Long userId, Long productId, Long orderId, long queueDeadline);
+    Order lookupFlashOrder(Long productId, Long orderId);
 
     /**
      * 模拟支付：不存在或不是本人 104001；不是 UNPAID 104002；已过 payDeadline 104003（不等定时任务，当场拒绝）。
@@ -89,6 +90,7 @@ public interface OrderService {
      * @return 本次取消的订单数
      */
     int cancelOverdueUnpaidOrders();
+    boolean cancelOverdueOrder(Long orderId);
 
     /**
      * 到期退款（VoucherExpireJob 调用）：分批取 status = UNUSED 且 expires_at ≤ 现在 的订单，

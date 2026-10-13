@@ -46,15 +46,15 @@ public class SearchServiceImpl implements SearchService {
     @Override
     public PageResult<ProductHitVO> searchProducts(ProductSearchQuery query) {
         validatePage(query);
+        // FLASH display and inventory are exclusively Redis-backed, not Elasticsearch-backed.
+        if (query.getType()==ProductType.FLASH) return PageResult.of(java.util.List.of(),0,query.getPage(),query.getSize());
         String keyword = normalizedKeyword(query.getKeyword());
         BoolQuery.Builder filters = new BoolQuery.Builder();
         filters.filter(q -> q.term(t -> t.field("status").value(ProductStatus.ON_SHELF.name())));
         if (query.getCategory() != null) {
             filters.filter(q -> q.term(t -> t.field("shopCategory").value(query.getCategory().name())));
         }
-        if (query.getType() != null) {
-            filters.filter(q -> q.term(t -> t.field("type").value(query.getType().name())));
-        }
+        filters.filter(q -> q.term(t -> t.field("type").value(ProductType.NORMAL.name())));
         if (keyword != null) {
             filters.must(q -> q.multiMatch(m -> m.fields("name", "contentsText", "shopName").query(keyword)));
         }

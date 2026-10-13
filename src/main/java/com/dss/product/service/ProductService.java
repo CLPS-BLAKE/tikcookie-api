@@ -30,6 +30,9 @@ public interface ProductService {
      */
     ProductVO getProduct(Long productId);
 
+    /** Personalized flash quota snapshot; userId must come from a validated login session. */
+    ProductVO getProduct(Long productId, Long userId);
+
     /**
      * 首页商品流：只含 ON_SHELF；latest 按 createdAt 倒序，sales 按 soldCount 倒序；分页（selectPage）。
      */

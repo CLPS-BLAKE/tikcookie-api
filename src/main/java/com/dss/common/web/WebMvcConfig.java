@@ -41,5 +41,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/v1/**")
                 .excludePathPatterns(INTERNAL_PATH)
                 .excludePathPatterns(PUBLIC_PATHS);
+        registry.addInterceptor(new OptionalProductLoginInterceptor(loginInterceptor))
+                .addPathPatterns("/api/v1/products/*");
     }
 }

@@ -89,7 +89,8 @@ class SearchServiceImplTest {
         service.searchProducts(request);
         NativeQuery query = productQuery();
         assertThat(query.getQuery().bool().must()).isEmpty();
-        assertThat(query.getQuery().bool().filter()).hasSize(1);
+        assertThat(query.getQuery().bool().filter()).hasSize(2);
+        assertThat(query.getQuery().bool().filter().get(1).term().value().stringValue()).isEqualTo("NORMAL");
         assertThat(query.getSortOptions()).hasSize(2);
         assertThat(query.getSortOptions().get(0).field().field()).isEqualTo(field);
         assertThat(query.getSortOptions().get(0).field().order()).isEqualTo(order);

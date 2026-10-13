@@ -55,7 +55,7 @@ public class ProductVO {
     @Schema(description = "使用规则")
     private List<String> useRules;
 
-    @Schema(description = "剩余库存（以 MySQL 为准），仅 FLASH")
+    @Schema(description = "Redis 可预占剩余库存，仅 FLASH")
     private Integer remainingStock;
 
     @Schema(description = "开抢时间，仅 FLASH")
@@ -66,6 +66,15 @@ public class ProductVO {
 
     @Schema(description = "每人限购，仅 FLASH")
     private Integer limitPerUser;
+
+    @Schema(description = "当前用户已占用的购买额度（含排队预占）；仅登录后的 FLASH 详情返回")
+    private Integer purchaseCount;
+
+    @Schema(description = "当前用户剩余购买额度；仅登录后的 FLASH 详情返回")
+    private Integer remainingQuota;
+
+    @Schema(description = "当前用户是否已达购买上限；仅登录后的 FLASH 详情返回")
+    private Boolean purchaseLimitReached;
 
     @Schema(description = "创建时间")
     private LocalDateTime createTime;

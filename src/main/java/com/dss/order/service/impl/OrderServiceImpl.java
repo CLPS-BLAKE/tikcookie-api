@@ -21,6 +21,11 @@ import com.dss.order.model.vo.OrderListItemVO;
 import com.dss.order.model.vo.OrderVO;
 import com.dss.order.service.OrderService;
 import com.dss.order.service.PayService;
+import com.dss.order.support.OrderIdGenerator;
+import com.dss.flash.service.*;
+import com.dss.flash.mq.FlashPublisher;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.dss.product.model.entity.Product;
 import com.dss.product.model.enums.ProductErrorCode;
 import com.dss.product.model.enums.ProductStatus;
@@ -38,6 +43,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.List;
 
 /**
@@ -68,6 +74,12 @@ public class OrderServiceImpl implements OrderService {
     private final PayService payService;
     private final DssProperties properties;
     private final FileUrlResolver fileUrlResolver;
+    private final OrderIdGenerator orderIdGenerator;
+    private final Clock clock;
+    private final FlashCacheService flashCache;
+    private final FlashRequestCoordinator coordinator;
+    private final FlashPublisher flashPublisher;
+    private final FlashRuntime flashRuntime;
     /** 券码撞号后用的"新事务"：支付重试必须跳过已回滚的旧事务。 */
     private final TransactionTemplate voucherRetryTemplate;
     /** 定时任务逐条提交用的事务模板：每条都是独立事务，失败不影响其他条。 */
@@ -76,16 +88,21 @@ public class OrderServiceImpl implements OrderService {
 
     public OrderServiceImpl(OrderMapper orderMapper, ProductService productService, ShopService shopService,
                             PayService payService, DssProperties properties, FileUrlResolver fileUrlResolver,
-                            PlatformTransactionManager transactionManager) {
+                            PlatformTransactionManager transactionManager, OrderIdGenerator orderIdGenerator, Clock clock,
+                            FlashCacheService flashCache, FlashRequestCoordinator coordinator, FlashPublisher flashPublisher, FlashRuntime flashRuntime) {
         this.orderMapper = orderMapper;
         this.productService = productService;
         this.shopService = shopService;
         this.payService = payService;
         this.properties = properties;
         this.fileUrlResolver = fileUrlResolver;
+        this.orderIdGenerator = orderIdGenerator;
+        this.clock = clock;
+        this.flashCache=flashCache; this.coordinator=coordinator; this.flashPublisher=flashPublisher; this.flashRuntime=flashRuntime;
         this.voucherRetryTemplate = new TransactionTemplate(transactionManager);
         this.voucherRetryTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.unitOfWorkTemplate = new TransactionTemplate(transactionManager);
+        this.unitOfWorkTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     // ---------- 下单 ----------
@@ -104,22 +121,34 @@ public class OrderServiceImpl implements OrderService {
         Shop shop = shopService.getRequiredShop(product.getShopId());
         Order order = buildOrder(userId, product, shop);
         orderMapper.insert(order);
+        if (flashRuntime.isReady() && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() {
+                    try { flashPublisher.sendTimeout(String.valueOf(order.getId())); }
+                    catch (RuntimeException e) { log.warn("Timeout delivery uncertain; database scan retained: orderId={}",order.getId()); }
+                }
+            });
+        }
         return new OrderCreatedVO(String.valueOf(order.getId()));
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public OrderCreatedVO createFlashOrder(Long userId, CreateOrderDTO dto) {
-        Long productId = parseId(dto.getProductId(), "productId");
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY, rollbackFor = Exception.class)
+    public Order createReservedFlashOrder(Long userId, Long productId, Long orderId, long queueDeadline) {
         // 第一个锁步骤：锁商品行，抢购下单、支付、取消、退款保持同一把加锁顺序
         Product product = productService.lockProduct(productId);
+        Order existing=orderMapper.selectByIdForUpdate(orderId);
+        if (existing!=null) {
+            if (!userId.equals(existing.getUserId()) || !productId.equals(existing.getProductId())) throw new BizException(CommonErrorCode.BAD_REQUEST);
+            return existing;
+        }
         if (product.getStatus() != ProductStatus.ON_SHELF) {
             throw new BizException(ProductErrorCode.PRODUCT_OFF_SHELF);
         }
         if (product.getType() != ProductType.FLASH) {
             throw new BizException(ProductErrorCode.NOT_FLASH_PRODUCT);
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (product.getFlashStartTime() == null || now.isBefore(product.getFlashStartTime())) {
             throw new BizException(ProductErrorCode.FLASH_NOT_STARTED);
         }
@@ -139,16 +168,31 @@ public class OrderServiceImpl implements OrderService {
             throw new BizException(ProductErrorCode.FLASH_SOLD_OUT);
         }
         Shop shop = shopService.getRequiredShop(product.getShopId());
-        Order order = buildOrder(userId, product, shop);
+        Order order = buildOrder(userId, product, shop, orderId);
         orderMapper.insert(order);
-        // 事务提交返回后订单已入库，立即可查（接口文档 5.6.2）
-        return new OrderCreatedVO(String.valueOf(order.getId()));
+        if (clock.millis() >= queueDeadline) throw new BizException(CommonErrorCode.BAD_REQUEST, "Queue deadline elapsed");
+        return order;
     }
 
     // ---------- 支付 / 取消 / 退款 / 去使用 ----------
 
     @Override
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public Order lookupFlashOrder(Long productId, Long orderId) {
+        // A new transaction/current read waits for any uncertain server-side commit to release this row.
+        productService.lockProduct(productId);
+        Order existing=orderMapper.selectByIdForUpdate(orderId);
+        if (existing!=null && !productId.equals(existing.getProductId())) throw new BizException(CommonErrorCode.BAD_REQUEST);
+        return existing;
+    }
+
+    @Override
     public OrderVO pay(Long userId, Long orderId) {
+        Order hint=requireMyOrder(userId,orderId);
+        return coordinator.locked(hint.getProductId(),()->payWithRetries(userId,orderId));
+    }
+
+    private OrderVO payWithRetries(Long userId, Long orderId) {
         // 券码撞唯一索引时整笔回滚，并在新事务里重试（中间件配置 3.3）
         for (int attempt = 1; attempt <= VOUCHER_CODE_MAX_ATTEMPTS; attempt++) {
             try {
@@ -162,15 +206,17 @@ public class OrderServiceImpl implements OrderService {
 
     private OrderVO doPay(Long userId, Long orderId) {
         Order order = requireMyOrder(userId, orderId);
+        Product product = productService.lockProduct(order.getProductId());
+        order=orderMapper.selectByIdForUpdate(orderId);
+        if (order==null || !userId.equals(order.getUserId())) throw new BizException(OrderErrorCode.ORDER_NOT_FOUND);
         if (order.getStatus() != OrderStatus.UNPAID) {
             throw new BizException(OrderErrorCode.ORDER_STATUS_INVALID);
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (order.getPayDeadline() == null || !order.getPayDeadline().isAfter(now)) {
             throw new BizException(OrderErrorCode.ORDER_PAY_EXPIRED);
         }
         // 先商品行再订单行，和取消 / 退款 / 抢购下单同一把顺序
-        Product product = productService.lockProduct(order.getProductId());
         if (!payService.pay(order)) {
             throw new BizException(CommonErrorCode.SYSTEM_ERROR, "支付失败，请重试");
         }
@@ -180,6 +226,7 @@ public class OrderServiceImpl implements OrderService {
         int rows = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .eq(Order::getId, orderId)
                 .eq(Order::getStatus, OrderStatus.UNPAID)
+                .gt(Order::getPayDeadline, now)
                 .set(Order::getStatus, OrderStatus.UNUSED)
                 .set(Order::getVoucherCode, voucherCode)
                 .set(Order::getPayChannel, PayChannel.MOCK)
@@ -194,17 +241,14 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public OrderVO cancel(Long userId, Long orderId) {
         Order order = requireMyOrder(userId, orderId);
-        if (order.getStatus() != OrderStatus.UNPAID) {
-            throw new BizException(OrderErrorCode.ORDER_STATUS_INVALID);
-        }
-        OrderVO canceled = transitionToCancelled(order, CancelReason.USER);
-        if (canceled == null) {
-            throw new BizException(OrderErrorCode.ORDER_STATUS_INVALID);
-        }
-        return canceled;
+        return coordinator.locked(order.getProductId(),()-> {
+            OrderVO cancelled=unitOfWorkTemplate.execute(status -> transitionToCancelled(order,CancelReason.USER));
+            if (cancelled==null) throw new BizException(OrderErrorCode.ORDER_STATUS_INVALID);
+            compensateCancellation(order);
+            return cancelled;
+        });
     }
 
     @Override
@@ -229,7 +273,7 @@ public class OrderServiceImpl implements OrderService {
         if (order.getStatus() != OrderStatus.UNUSED) {
             throw new BizException(OrderErrorCode.ORDER_NOT_USABLE);
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (order.getExpiresAt() == null || !order.getExpiresAt().isAfter(now)) {
             throw new BizException(OrderErrorCode.VOUCHER_EXPIRED);
         }
@@ -292,7 +336,7 @@ public class OrderServiceImpl implements OrderService {
             List<Long> ids = orderMapper.selectList(Wrappers.<Order>lambdaQuery()
                             .select(Order::getId)
                             .eq(Order::getStatus, OrderStatus.UNPAID)
-                            .le(Order::getPayDeadline, LocalDateTime.now())
+                            .le(Order::getPayDeadline, LocalDateTime.now(clock))
                             .orderByAsc(Order::getId)
                             .last("LIMIT " + JOB_BATCH_SIZE))
                     .stream()
@@ -303,10 +347,8 @@ public class OrderServiceImpl implements OrderService {
             }
             int done = 0;
             for (Long id : ids) {
-                if (Boolean.TRUE.equals(unitOfWorkTemplate.execute(
-                        status -> cancelOverdueOne(id)))) {
-                    done++;
-                }
+                try { if (cancelOverdueOrder(id)) done++; }
+                catch (RuntimeException e) { log.warn("Unable to cancel overdue orderId={}",id); }
             }
             total += done;
             if (done == 0) {
@@ -324,7 +366,7 @@ public class OrderServiceImpl implements OrderService {
             List<Long> ids = orderMapper.selectList(Wrappers.<Order>lambdaQuery()
                             .select(Order::getId)
                             .eq(Order::getStatus, OrderStatus.UNUSED)
-                            .le(Order::getExpiresAt, LocalDateTime.now())
+                            .le(Order::getExpiresAt, LocalDateTime.now(clock))
                             .orderByAsc(Order::getId)
                             .last("LIMIT " + JOB_BATCH_SIZE))
                     .stream()
@@ -357,10 +399,11 @@ public class OrderServiceImpl implements OrderService {
      * @return null 表示订单已经不是 UNPAID（重复处理，跳过），否则返回取消后的订单
      */
     private OrderVO transitionToCancelled(Order order, CancelReason reason) {
-        if (order.getProductType() == ProductType.FLASH) {
-            productService.lockProduct(order.getProductId());
-        }
-        LocalDateTime now = LocalDateTime.now();
+        productService.lockProduct(order.getProductId());
+        order=orderMapper.selectByIdForUpdate(order.getId());
+        if (order==null || order.getStatus()!=OrderStatus.UNPAID) return null;
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (reason==CancelReason.TIMEOUT && (order.getPayDeadline()==null || order.getPayDeadline().isAfter(now))) return null;
         int rows = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
                 .eq(Order::getId, order.getId())
                 .eq(Order::getStatus, OrderStatus.UNPAID)
@@ -386,12 +429,10 @@ public class OrderServiceImpl implements OrderService {
      */
     private OrderVO transitionToRefunded(Order order, RefundReason reason, LocalDateTime expiredBefore) {
         productService.lockProduct(order.getProductId());
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         var update = Wrappers.<Order>lambdaUpdate()
                 .eq(Order::getId, order.getId())
                 .eq(Order::getStatus, OrderStatus.UNUSED)
-                // 到期退款的条件和扫描一致：只退 expires_at 已过（<= expiredBefore）的订单，
-                // 未到期的 UNUSED 不会被这条 UPDATE 命中；状态已不是 UNUSED 时更新行数为 0，重复扫描不会重复扣销量
                 .le(expiredBefore != null, Order::getExpiresAt, expiredBefore)
                 .set(Order::getStatus, OrderStatus.REFUNDED)
                 .set(Order::getRefundedAt, now)
@@ -413,18 +454,49 @@ public class OrderServiceImpl implements OrderService {
         return transitionToCancelled(order, CancelReason.TIMEOUT) != null;
     }
 
+    @Override
+    public boolean cancelOverdueOrder(Long orderId) {
+        Order hint=orderMapper.selectById(orderId);
+        if (hint==null) return false;
+        return coordinator.locked(hint.getProductId(),()-> {
+            boolean cancelled=Boolean.TRUE.equals(unitOfWorkTemplate.execute(status -> cancelOverdueOne(orderId)));
+            if (cancelled) compensateCancellation(hint);
+            return cancelled;
+        });
+    }
+
+    private void compensateCancellation(Order order) {
+        if (order.getProductType()!=ProductType.FLASH) return;
+        try {
+            String key=flashCache.requestForOrder(String.valueOf(order.getId()));
+            if (key!=null) {
+                var request=flashCache.findRequest(key);
+                if (request!=null) flashCache.release(request,true);
+                else flashCache.pause(order.getProductId());
+            }
+            // Missing old-round transaction caches are not recreated.
+        } catch (RuntimeException e) {
+            flashCache.pause(order.getProductId());
+            log.warn("Order cancellation committed; Redis reconciliation required: orderId={}",order.getId());
+        }
+    }
+
     private boolean refundExpiredOne(Long orderId) {
         Order order = orderMapper.selectById(orderId);
         if (order == null || order.getStatus() != OrderStatus.UNUSED) {
             return false;
         }
-        return transitionToRefunded(order, RefundReason.EXPIRED, LocalDateTime.now()) != null;
+        return transitionToRefunded(order, RefundReason.EXPIRED, LocalDateTime.now(clock)) != null;
     }
 
     // ---------- 内部工具 ----------
 
     private Order buildOrder(Long userId, Product product, Shop shop) {
+        return buildOrder(userId,product,shop,orderIdGenerator.nextId());
+    }
+    private Order buildOrder(Long userId, Product product, Shop shop, Long orderId) {
         Order order = new Order();
+        order.setId(orderId);
         order.setUserId(userId);
         order.setProductId(product.getId());
         order.setShopId(product.getShopId());
@@ -435,7 +507,9 @@ public class OrderServiceImpl implements OrderService {
         order.setSnapshotPrice(product.getPrice());
         order.setAmount(product.getPrice());
         order.setStatus(OrderStatus.UNPAID);
-        order.setPayDeadline(LocalDateTime.now().plusMinutes(properties.getOrder().getPayTimeoutMinutes()));
+        LocalDateTime createdAt=LocalDateTime.now(clock);
+        order.setCreatedAt(createdAt); order.setUpdatedAt(createdAt);
+        order.setPayDeadline(createdAt.plusMinutes(properties.getOrder().getPayTimeoutMinutes()));
         return order;
     }
 

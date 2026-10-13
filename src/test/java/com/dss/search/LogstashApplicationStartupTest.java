@@ -42,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.elasticsearch.connection-timeout=100ms", "spring.elasticsearch.socket-timeout=100ms",
         "dss.file.oss.endpoint=http://127.0.0.1:1", "dss.file.oss.bucket=test-bucket", "dss.file.oss.region=cn-guangzhou",
         "dss.file.oss.access-key-id=test", "dss.file.oss.access-key-secret=test",
-        "dss.job.enabled=false", "dss.search.rebuild-on-startup=false", "springdoc.api-docs.enabled=false"
+        "dss.job.enabled=false", "dss.flash.enabled=false", "dss.search.rebuild-on-startup=false", "springdoc.api-docs.enabled=false"
 })
 @AutoConfigureMockMvc
 class LogstashApplicationStartupTest {

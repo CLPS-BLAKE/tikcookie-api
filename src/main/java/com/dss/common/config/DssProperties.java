@@ -20,6 +20,16 @@ public class DssProperties {
     private OrderProperties order = new OrderProperties();
     private JobProperties job = new JobProperties();
     private SearchProperties search = new SearchProperties();
+    private FlashProperties flash = new FlashProperties();
+
+    @Data
+    public static class FlashProperties {
+        /** Single-instance demo. Every enabled startup appends a new round. */
+        private boolean enabled = true;
+        private String mqPrefix = "dss.flash";
+        private Duration lifecycleInterval = Duration.ofSeconds(1);
+        private Duration requestTimeoutInterval = Duration.ofSeconds(1);
+    }
 
     @Data
     public static class InternalProperties {

@@ -17,7 +17,7 @@ public enum ProductErrorCode implements ErrorCode {
     PRODUCT_SHOP_IMMUTABLE(103004, "商品所属店铺不能修改"),
     FLASH_PARAMS_REQUIRED(103005, "抢购商品必须填写库存、开抢时间和结束时间"),
     FLASH_TIME_INVALID(103006, "结束时间必须晚于开抢时间"),
-    FLASH_STARTED_LOCKED(103007, "抢购已开始，不能修改库存、限购和时间"),
+    FLASH_STARTED_LOCKED(103007, "抢购已开始，不能修改商品资料"),
     FLASH_NOT_STARTED(103008, "抢购还没开始"),
     FLASH_ENDED(103009, "抢购已结束"),
     FLASH_SOLD_OUT(103010, "已抢光"),

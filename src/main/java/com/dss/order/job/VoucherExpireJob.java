@@ -1,6 +1,8 @@
 package com.dss.order.job;
 
 import com.dss.order.service.OrderService;
+import com.dss.common.config.DssProperties;
+import com.dss.flash.service.FlashRuntime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,9 +20,12 @@ import org.springframework.stereotype.Component;
 public class VoucherExpireJob {
 
     private final OrderService orderService;
+    private final FlashRuntime flashRuntime;
+    private final DssProperties properties;
 
     @Scheduled(fixedDelayString = "${dss.job.voucher-expire-interval:PT1M}")
     public void run() {
+        if (properties.getFlash().isEnabled() && !flashRuntime.isReady()) return;
         int count = orderService.refundExpiredVouchers();
         log.info("到期退款任务：退了 {} 个订单", count);
     }
