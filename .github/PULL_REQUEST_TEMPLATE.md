@@ -29,7 +29,7 @@
 - [ ] 修改 API 契约
 - [ ] 修改数据结构或演示数据
 - [ ] 新增或修改环境变量
-- [ ] 修改 MongoDB、Redis、RabbitMQ、Elasticsearch 或 OSS 集成
+- [ ] 修改 MySQL、Redis、RabbitMQ、Elasticsearch 或 OSS 集成
 - [ ] 影响前端发布顺序
 - [ ] 存在不兼容变更
 

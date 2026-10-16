@@ -1,0 +1,25 @@
+{
+  "index_patterns": ["dss_product"],
+  "priority": 200,
+  "template": {
+    "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "id": {"type": "keyword"},
+        "shopId": {"type": "keyword"},
+        "name": {"type": "text", "analyzer": "standard"},
+        "contentsText": {"type": "text", "analyzer": "standard"},
+        "shopName": {"type": "text", "analyzer": "standard"},
+        "shopCategory": {"type": "keyword"},
+        "type": {"type": "keyword"},
+        "status": {"type": "keyword"},
+        "price": {"type": "long"},
+        "soldCount": {"type": "integer"},
+        "image": {"type": "keyword", "index": false},
+        "flashStartTime": {"type": "date", "format": "yyyy-MM-dd HH:mm:ss"},
+        "flashEndTime": {"type": "date", "format": "yyyy-MM-dd HH:mm:ss"}
+      }
+    }
+  }
+}

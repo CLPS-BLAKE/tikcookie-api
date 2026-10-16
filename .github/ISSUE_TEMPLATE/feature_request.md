@@ -20,7 +20,7 @@ assignees: ""
 
 ## 接口、数据与中间件影响
 
-说明 API、数据结构、MongoDB、Redis、RabbitMQ、Elasticsearch、OSS 或部署配置的变化；没有则填写“无”。
+说明 API、数据结构、MySQL、Redis、RabbitMQ、Elasticsearch、OSS 或部署配置的变化；没有则填写“无”。
 
 ## 兼容与回退
 

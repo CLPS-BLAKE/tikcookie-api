@@ -1,77 +1,60 @@
-# 项目与架构说明
+# 项目指南
 
+本仓库是单个 Maven 模块，包名为 `com.dss`。代码基线为远端 main `e79f349`。本文描述源码结构，不证明测试或部署结果。
 
-> 2026-10-13 秒杀改造更新：普通订单同步、FLASH Redis 预占 + MQ 异步建单，所有新订单应用雪花 ID；新增本人建单结果接口。开抢后全资料冻结；启动追加新轮，不清历史。最新接口/配置/部署/测试及单实例故障边界以 [FLASH_SALE.md](FLASH_SALE.md) 为准；下文旧日期部署记录保留为历史，不能据其推断新分支已发布。
+## 总体架构
 
-## 1. 项目目标
+```mermaid
+flowchart LR
+    U[浏览器] --> N[Nginx：dist 与 API 入口]
+    N --> A[Spring Boot：单实例 JAR]
+    A --> D[(MySQL：业务事实)]
+    A --> R[(Redis：登录态与抢购预占)]
+    A --> Q[RabbitMQ：建单与支付超时]
+    Q --> C[消费者：校验与事务建单]
+    C --> D
+    C --> R
+    D --> L[Logstash JDBC：轮询同步]
+    L --> E[(Elasticsearch：搜索索引)]
+    A -->|只读搜索| E
+    A --> O[阿里云 OSS：图片]
+    U -->|公共读 URL| O
+    N -->|代理读图经后端| A
+```
 
-TikCookie 是一个团购业务方向的 Java 教学展示项目。团队共 5 人，采用前后端分离开发，目标是完成可联调、可部署、可重复演示的业务系统。
+Nginx 托管 `/var/www/tikcookie-web/dist`，API 转发到回环 JAR。Compose 只运行 MySQL、Redis、RabbitMQ、ES 和 Logstash；OSS 是外部依赖。开发时 Vite `/api` 代理直接连接后端，不需要发布 dist。
 
-后端主要覆盖：
+## 源码入口
 
-- 登录与身份管理
-- 用户、店铺、商品和订单业务
-- 商品分类筛选与关键词搜索
-- 商品及用户图片管理
-- Redis 缓存或登录状态
-- Logstash JDBC 已完成的 MySQL → ES 同步；RabbitMQ 既有消息消费仍待完成
-- 可通过 Swagger / OpenAPI 验证的接口
-
-最终业务范围以团队任务和验收清单为准。
-
-## 2. 运行位置与目标入口（2026-10-08 更新）
-
-| 位置 | 服务 |
+| 路径 | 职责 |
 | --- | --- |
-| ECS node1（2 核 4 GB，已运行） | MySQL、Redis、Elasticsearch、RabbitMQ |
-| 阿里云 ECS（后端已部署） | Spring Boot；具体实例/版本及是否同驻 node1 待记录 |
-| 待部署 | Nginx、前端构建物；位置与后端 upstream 待确认 |
-| 阿里云 OSS | 商品图片与用户上传图片 |
-| 阿里云 ACR | 前端与后端镜像 |
+| `src/main/java/com/dss/DssApplication.java` | 启动、调度和上海时区 |
+| `common` | 响应、异常、鉴权、分页、配置和图片 URL |
+| `user` | 验证码登录、资料和退出 |
+| `shop` / `product` | 店铺、分类、商品、内部管理接口 |
+| `order` | 普通下单、支付、取消、退款、用券和扫描任务 |
+| `flash` | 启动演示轮次、Redis Lua、MQ、请求协调和调度 |
+| `favorite` / `review` | 收藏和评价 |
+| `search` | ES 查询、文档映射；历史写入辅助类不作为启用链路 |
+| `file` | OSS 上传及代理读取 |
+| `src/main/resources/application*.yml` | 公共配置和 profile 日志差异 |
+| `src/test/java` | 公共契约、鉴权、文件和搜索测试 |
+| `dss-init.sql` | 空库六表结构，不是旧库迁移脚本 |
 
-阿里云 ECS 规格为 2 核 4 GB。四种中间件同驻 node1，后端已部署阿里云，但是否与 node1 同机尚未确认；Nginx 和前端尚未部署。目标统一入口不表示现状已通过 Nginx 接入。实际后端实例/版本、网络和端口待记录；资源/持久化/边界见 [部署约定](DEPLOYMENT.md)。
+表为 `users`、`shops`、`products`、`orders`、`favorites`、`reviews`。
 
-## 3. 中间件业务用途
+## 数据与流程
 
-| 组件 | 业务用途 | 验收方式 |
-| --- | --- | --- |
-| MySQL + MyBatis-Plus | 用户、店铺、商品和订单数据 | 数据可写入、查询并持久保存 |
-| Redis | 登录状态、验证码、频控与错误次数 | 登录链路实际使用 Redis；本期不做热门商品缓存 |
-| RabbitMQ | 商品变更消息 | 可观察消息生产、消费与失败处理 |
-| Elasticsearch | 商品搜索和分类筛选 | 使用真实索引，商品变化后结果可更新 |
-| OSS | 商品与用户图片 | 上传后可在页面访问 |
+- MySQL 是订单、库存和业务资料的事实来源。订单保存商品与店铺快照。
+- 普通订单同步写库。抢购先预占 Redis，再经 MQ 异步建单，最后确认缓存。
+- Redis 可预占库存与 MySQL 建单后的库存可能暂时不同，不能直接互相覆盖。
+- 取消、建单和补偿使用单 JVM 协调锁，不支持多个后端实例并行运行。
+- 搜索使用 `dss_product`、`dss_shop`。Java 仅读取，Logstash 是索引写入方。禁用 Java 启动重建。
+- 搜索有延迟，不能作为下单或抢购库存依据。当前商品搜索只返回 NORMAL。
+- 图片 `fileId` 是 OSS 对象 key；URL 由 `FileUrlResolver` 生成。代理读图公开，不适合敏感图片。
 
-## 4. 示例业务链路
+## 开发顺序
 
-当前索引链路：商品/店铺变更维护 MySQL 更新时间，Logstash 每分钟读取并覆盖 ES。2026-10-08 负责人确认部署及同步成功，店铺 5/5、商品 30/30，mapping 符合配置；见 [部署记录](LOGSTASH_SYNC.md)。RabbitMQ 发布及消费者入口保留，SearchService 的消费同步、查询和重建仍是桩；Java/API/页面搜索尚待完成，不等于整条用户链路已验收。
+先读 [需求](需求文档.md) 和 [接口](接口文档.md)，再配置依赖、初始化空库、构建和验证。配置见 [CONFIGURATION.md](CONFIGURATION.md)，部署见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
-Elasticsearch 索引必须能够从 MySQL 重建，不能作为唯一业务数据来源。
-
-## 5. 已经确定的技术决定
-
-骨架已经落地，下面这些不再是待定项（细节见对应文档）：
-
-| 决定 | 结论 | 依据 |
-| --- | --- | --- |
-| 语言与框架 | JDK 21、Spring Boot 3.5.16、单个 Maven 模块按业务分包 | `pom.xml`、README |
-| 模块边界 | `common` 不反向依赖业务包；业务模块通过 Service 接口协作，例如订单调用商品/店铺服务 | 各模块 Service |
-| 统一响应 | `{code, msg, data}`，成功 `0`；通用码对应 HTTP 状态，业务码固定 200 | [接口文档](接口文档.md) 1.3 |
-| 异常处理 | 全局 `@RestControllerAdvice` 统一转换，不向客户端返回框架异常原文 | `GlobalExceptionHandler` |
-| 鉴权 | C 端 Bearer token（Redis 登录态、7 天滑动续期）+ 内部 `X-Internal-Key` | [接口文档](接口文档.md) 1.2 |
-| 数据访问 | MySQL 8.x + MyBatis-Plus（分页插件、`createdAt`/`updatedAt` 自动填充） | [中间件配置](中间件配置.md) 3 |
-| 中间件版本 | MySQL 8.x、Elasticsearch 8.x（客户端 8.18）、Redis、RabbitMQ、OSS SDK 3.18.5 | README |
-| 图片 | 后端生成 ObjectKey 存 OSS，库里只存 fileId，URL 由 `FileUrlResolver` 拼接 | [中间件配置](中间件配置.md) 6 |
-| 搜索同步 | Logstash JDBC 已部署并同步；Java 查询/MQ 消费/重建仍是桩，后续明确写入方切换 | [中间件配置](中间件配置.md) 5、[部署记录](LOGSTASH_SYNC.md) |
-| 构建与测试命令 | `mvn -B clean verify`（JDK 21）；后端 CI 已配置 | README、[测试与验收规范](TESTING.md) |
-
-## 6. 尚未完成的内容
-
-- 收藏、ES 查询、消息同步索引与全量重建；
-- 到期退款条件修复，库存/限购/状态与重复操作回归；
-- 端到端联调与页面验收；
-- 测试提交及执行证据（本地公共测试未合入核对基线）；
-- 应用 Dockerfile/Compose、前端 CI 与自动发布（后端构建 CI 已有）；Logstash Compose 已使用，部署配置待归档到仓库；
-- 登记已部署后端的实例/版本；部署 Nginx 和前端，核对 node1 的 2C4G 资源、连接/持久化、健康检查与回退。
-
-详细基线与验收顺序见 [实现进度与待办](PROGRESS.md)。已有实现不替代真实环境验收；待办通过 PR 落地。
-
+改接口时同时更新 Controller、DTO/VO、OpenAPI 和文档。PR 说明兼容性、联调顺序和验证结果。不要将测试文件存在视为测试通过，也不要将构建成功视为部署成功。

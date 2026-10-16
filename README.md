@@ -1,87 +1,59 @@
 # TikCookie API
 
-TikCookie 的后端仓库，面向 Java 教学成果展示项目，负责业务 API、中间件集成、数据持久化以及共享部署配置。
+TikCookie 是团购券教学项目。本仓库提供后端 API，支持浏览商品、验证码登录、普通下单、抢购、模拟支付和用券。它不是商用交易系统。
 
-> 2026-10-13 当前工作区更新：抢购闭环已实现，普通商品同步下单，FLASH 走 Redis 预占 → RabbitMQ → MySQL 异步建单；支持本人结果查询、个人限购、模拟支付、取消回补和超时处理。此说明不表示已合并或线上已发布。抢购读者请优先使用下方专门文档，旧日期记录只代表当时状态。
+前端源码、开发与测试入口：[tikcookie-web](https://github.com/CLPS-BLAKE/tikcookie-web)。
 
-## 项目定位
+业务代码基线为远端 main `e79f3496e6790efc9728a9926b4152b4bd069f16`。已实现、构建通过、部署成功和业务验收分别记录。
 
-- 后端技术方向：Spring Boot
-- 数据存储：MySQL 8.0（单机 InnoDB） + MyBatis-Plus
-- 缓存：Redis
-- 通用消息队列：RabbitMQ
-- 商品检索：Elasticsearch；MySQL → Logstash JDBC → ES 同步
-- 图片存储：阿里云 OSS
-- API 文档：Swagger / OpenAPI
-- 对应前端仓库：[tikcookie-web](https://github.com/CLPS-BLAKE/tikcookie-web)
+## 功能和架构
 
-## 文档入口
+- 用户：演示验证码、自动注册、登录、退出、昵称和头像。
+- 店铺与商品：分类、详情、列表、内部录入和上下架。
+- 订单：普通同步下单；抢购通过 Redis 预占、RabbitMQ 异步建单。
+- 交易：模拟支付、券码、本人用券、取消、退款和到期任务。
+- 配套：收藏、评价、Elasticsearch 搜索、OSS 图片上传和代理读取。
 
-- [抢购用户使用指南（普通用户）](docs/FLASH_SALE_USER_GUIDE.md)
-- [抢购系统技术说明（设计、流程、边界与验收）](docs/FLASH_SALE.md)
-- [贡献指南](CONTRIBUTING.md)
-- [项目与架构说明](docs/PROJECT_GUIDE.md)
-- [实现进度与优先待办](docs/PROGRESS.md)
-- [开发、评审与合并流程](docs/WORKFLOW.md)
-- [接口协作约定](docs/API_CONTRACT.md)
-- [配置与安全约定](docs/CONFIGURATION.md)
-- [部署职责与目录约定](docs/DEPLOYMENT.md)
-- [测试与验收规范](docs/TESTING.md)
-- [版本与发布记录](docs/RELEASES.md)
-- [团队职责登记](docs/TEAM.md)
-- [安全说明](SECURITY.md)
+后端是一个 Spring Boot 应用。MySQL 保存业务数据；Redis 保存登录态和抢购状态；RabbitMQ 处理抢购消息。Java 只读 ES，索引由 Logstash JDBC 同步。图片存储使用外部阿里云 OSS。
 
-## 本地构建
+## 构建与运行
 
-后端是单个 Maven 模块，按业务分包：com.dss.common、user、shop、product、order、favorite、search、file。当前本地分支两个搜索接口已实现；查询只读 ES，同步由 Logstash 负责，Java sync/rebuildAll 明确禁止调用，不新增维护 API。其他业务的历史统计见进度文档，不由本次搜索测试证明。
+需要 JDK 21 和 Maven。主要依赖为 Spring Boot 3.5.16、MyBatis-Plus 3.5.17、OSS SDK 3.18.5。前端使用自己的仓库与锁文件构建。
 
-| 项 | 版本 |
-| --- | --- |
-| JDK | 21 |
-| Maven | 3.6.3 及以上（本地用 3.9.9 验证） |
-| Spring Boot | 3.5.16 |
-| MyBatis-Plus | 3.5.17（`mybatis-plus-spring-boot3-starter` + `mybatis-plus-jsqlparser`） |
-| MySQL 驱动 | mysql-connector-j 9.7.0（由 Spring Boot 管理） |
-| Elasticsearch 客户端 | 8.18.8，Spring Data Elasticsearch 5.5.13（由 Spring Boot 管理） |
-| 阿里云 OSS SDK | 3.18.5 |
-| springdoc-openapi | 2.8.17 |
-
-服务端需要 MySQL 8.x 和 Elasticsearch 8.x（与 8.18 客户端兼容），另有 Redis、RabbitMQ 和 OSS；索引同步由部署中的 Logstash 负责，RabbitMQ 通用能力和配置仍供其他功能复用。
-
-构建与验证命令（产物是 `target/dss-0.0.1-SNAPSHOT.jar`；CI 使用等效命令 `mvn -B --no-transfer-progress clean verify`）：
+在后端仓库根目录执行：
 
 ```bash
-mvn -B clean verify
+mvn -B --no-transfer-progress clean verify
 ```
 
-`JAVA_HOME` 必须指向 JDK 21。
+产物为 `target/dss-0.0.1-SNAPSHOT.jar`。准备 OSS，复制 `.env.example` 为 `.env` 并填值和确认新建环境。Compose 的 MySQL 在空卷首次启动时自动执行 `dss-init.sql`、创建六表和账号，不再手工重复导入。后端从包含 `.env` 的仓库根目录启动：
 
-当前本地 src/test 有公共契约、文件、搜索、完整启动与历史消息用例，未提交的用例不能计入远端覆盖。默认不执行真实中间件测试：SearchApiEsLiveTest 需显式 DSS_ES_LIVE_TEST=true；历史 OSS/MQ 分别需 DSS_OSS_LIVE_TEST=true、DSS_RABBIT_LIVE_TEST=true。即使存在 .env，默认构建也不上传对象或投递 MQ。分层说明见 [测试与验收规范](docs/TESTING.md)。
+```bash
+java -Dserver.address=127.0.0.1 -jar target/dss-0.0.1-SNAPSHOT.jar
+```
 
-本地运行：
+应用自动读取 `.env`，进程环境变量优先。Swagger 在启用后可通过受控本机入口 `/swagger-ui.html` 使用。
 
-1. 在空的 MySQL 8.x 库上，用有建表权限的管理账号执行根目录的 `dss-init.sql`（只建 5 张表和索引，不写数据）。
-2. 按根目录的 `.env.example` 准备环境变量，复制成 `tikcookie-api/.env`。标"必填"的缺一个，应用就会启动失败。
-   `application.yml` 里已经配置 `spring.config.import: optional:file:./.env[.properties]`，**工作目录是 `tikcookie-api`
-   时会自动读取 `.env`**（操作系统环境变量优先级更高，服务器/CI 注入真实变量时不受影响）；用 IDEA 运行时注意把工作目录设成模块目录。
-3. 启动：`java -jar target/dss-0.0.1-SNAPSHOT.jar`，或在 IDEA 里运行 `com.dss.DssApplication`。
-4. 打开 `http://localhost:8080/swagger-ui.html` 查看接口。调用内部接口前，先在 Authorize 里填入 `X-Internal-Key`。
-5. MySQL、Redis、RabbitMQ、ES 的连接指向 node1 的可达私网地址或受控入口；实例名不保证 DNS 可解析，不能把本机 localhost 当作云端中间件地址。保留 DSS_RABBIT_* 和通用 MQ 配置供其他功能使用；仅搜索链路不使用 RabbitMQ。
-6. 当前工作区 DSS_FLASH_ENABLED 与 DSS_JOB_ENABLED 默认均为 true，但旧环境文件可覆盖默认值；启动抢购会追加新轮，先按 [抢购技术说明](docs/FLASH_SALE.md) 确认演示店铺、环境隔离及旧 timer 停用。订单扫描用于支付超时及券到期退款兜底，演示部署应显式确认 DSS_JOB_ENABLED=true。DSS_SEARCH_REBUILD_ON_STARTUP 必须 false，误设 true 会启动失败，不删除索引。
+**抢购启动有副作用**：代码默认启用抢购，每次启用启动会追加一轮演示商品。首次基础检查显式设 `DSS_FLASH_ENABLED=false`，启用演示前阅读抢购说明。`DSS_SEARCH_REBUILD_ON_STARTUP` 必须 false。
 
-## 基本协作规则
+## 验证记录
 
-1. 禁止直接向 `main` 推送业务代码。
-2. 从最新 `main` 创建短期任务分支。
-3. 所有变更通过 Pull Request 合并。
-4. 每个 PR 至少需要 1 名合格评审者批准。
-5. 合并前必须通过必需检查并解决全部评审讨论。
-6. 统一使用 Squash merge，合并后删除任务分支。
-7. 密码、Token、云密钥及真实环境配置不得进入仓库。
+2026-10-16（本机 Windows）：JDK 21 执行上述 Maven 命令，189 项测试，0 失败、0 错误、17 跳过，构建成功；前端 `npm ci`、`npm run build` 成功。Mockito/Byte Buddy 动态代理告警仍在，跳过项不算通过。目标 Linux 完整部署、真实依赖和全链路未验证；Nginx 局部验证见 [TESTING.md](docs/TESTING.md)。
 
-## 当前状态
+## 部署与文档
 
-历史远端 af739da 的全模块统计见进度文档。2026-10-08 当前本地功能分支已完成两个 ES 搜索接口，具体证据见 SEARCH_API.md；不把本地完成记为远端已合并或线上已发布。索引只由 Logstash 同步，Java 搜索不使用 MQ 或重建。
+单机 Linux 上用 `deploy/compose/middleware.yml` 运行 MySQL、Redis、RabbitMQ、Elasticsearch、Logstash；后端运行 JAR；Nginx 使用 `deploy/nginx/tikcookie.conf` 托管 `/var/www/tikcookie-web/dist` 并转发 API。统一使用后端根目录 `.env`。完整克隆、初始化、构建和启停步骤见 [部署说明](docs/DEPLOYMENT.md)。本地前端开发使用 Vite `/api` 代理连接回环后端，不使用生产 Nginx 代替开发服务器。
 
-后端构建 CI 已配置，但不代表本次运行结果或测试已通过。当前本地抢购实现包含到期退款条件处理，既有本地验收记录与待发布项目见 [抢购技术说明](docs/FLASH_SALE.md)，不沿用旧待办推断当前源码。后端曾部署阿里云，实际实例/版本待记录；当前抢购构建物、Nginx/前端及真实环境全链路验收仍须按部署流程确认。2C4G ECS 上的四种中间件同驻 node1 的历史记录见 [部署约定](docs/DEPLOYMENT.md) 与 [进度待办](docs/PROGRESS.md)。
-
+| 文档 | 内容 |
+| --- | --- |
+| [需求文档](docs/需求文档.md) | 目标、规则、验收和用户故事教学附录 |
+| [项目指南](docs/PROJECT_GUIDE.md) | 总体架构、数据流和源码入口 |
+| [接口文档](docs/接口文档.md) | 路径、鉴权、参数、字段和错误码 |
+| [部署说明](docs/DEPLOYMENT.md) | 单机 Linux 可执行步骤 |
+| [配置说明](docs/CONFIGURATION.md) | 统一环境变量、OSS 和安全边界 |
+| [测试说明](docs/TESTING.md) | 已执行记录、测试分层和核心验证 |
+| [抢购技术说明](docs/FLASH_SALE.md) / [使用指南](docs/FLASH_SALE_USER_GUIDE.md) | 抢购流程和故障边界 |
+| [发布记录](docs/RELEASES.md) | 基线、剩余验证和发布登记 |
+| [团队](docs/TEAM.md) / [协作流程](docs/WORKFLOW.md) | 分工和评审 |
+| [贡献指南](CONTRIBUTING.md) / [安全说明](SECURITY.md) | 贡献和敏感信息处理 |
+| [历史计划](docs/plan/README.md) | 历史设计与计划 |

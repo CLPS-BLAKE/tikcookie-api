@@ -1,0 +1,14 @@
+node.name: tikcookie-logstash
+path.data: /usr/share/logstash/data
+api.http.host: 127.0.0.1
+api.http.port: 9600
+xpack.monitoring.enabled: false
+pipeline.workers: 1
+pipeline.ordered: true
+pipeline.batch.size: 125
+queue.type: persisted
+queue.max_bytes: 256mb
+queue.checkpoint.writes: 1
+dead_letter_queue.enable: true
+dead_letter_queue.max_bytes: 128mb
+log.level: info
