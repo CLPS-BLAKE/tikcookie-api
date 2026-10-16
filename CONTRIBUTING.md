@@ -52,7 +52,7 @@ docs(config): add OSS variable descriptions
 
 ## 本地检查
 
-后端项目骨架建立后，提交前至少执行仓库声明的：
+提交前按 [测试说明](docs/TESTING.md) 执行适用检查，并记录未验证项：
 
 - 编译
 - 单元测试

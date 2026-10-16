@@ -8,6 +8,14 @@ out/
 
 # 本地环境变量文件（含口令）不入库
 .env
+.env.*
+!.env.example
+
+# Local deployment checks and private configuration
+__pycache__/
+/deploy/tests/.contract-*/
+/deploy/**/secrets/
+/deploy/**/data/
 
 # 日志
 logs/
@@ -16,3 +24,4 @@ logs/
 # 系统文件
 .DS_Store
 Thumbs.db
+docs/teaching/**

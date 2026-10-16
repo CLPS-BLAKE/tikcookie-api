@@ -1,0 +1,164 @@
+# Linux single-host, trusted-machine demo only; HTTP inside the local Docker network.
+# From tikcookie-api: docker compose --env-file .env -f deploy/compose/middleware.yml up -d --build
+# Before first use: review dss-init.sql, fill secrets, explicitly confirm CREATE_NEW_DSS.
+# Existing volumes are never reset/migrated. Do not use down -v on a valued instance.
+name: tikcookie-local
+
+x-service: &service
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
+
+services:
+  mysql:
+    <<: *service
+    image: mysql:8.4.4
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${DSS_MYSQL_ROOT_PASSWORD:?Set a new local MySQL root password}
+      DSS_NEW_DATABASE_CONFIRM: ${DSS_NEW_DATABASE_CONFIRM:?Review dss-init.sql and set CREATE_NEW_DSS for a new deployment}
+      DSS_MYSQL_PASSWORD: ${DSS_MYSQL_PASSWORD:?Set the dss_app password}
+      DSS_LOGSTASH_MYSQL_PASSWORD: ${DSS_LOGSTASH_MYSQL_PASSWORD:?Set the read-only JDBC password}
+    command:
+      - --default-time-zone=+08:00
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --innodb-buffer-pool-size=256M
+      - --max-connections=100
+    ports:
+      - '127.0.0.1:${DSS_MYSQL_PORT:-3306}:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init.sh:/docker-entrypoint-initdb.d/10-tikcookie.sh:ro
+      - ../../dss-init.sql:/opt/tikcookie/dss-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'MYSQL_PWD="$${MYSQL_ROOT_PASSWORD}" mysql --protocol=socket -uroot -Nse "SELECT 1 FROM dss.shops LIMIT 0"']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 256
+
+  redis:
+    <<: *service
+    image: redis:7.4.2
+    environment:
+      TZ: Asia/Shanghai
+      REDIS_PASSWORD: ${DSS_REDIS_PASSWORD:?Set a new local Redis password}
+    command:
+      - /bin/sh
+      - -ec
+      - 'exec redis-server --appendonly yes --appendfsync everysec --requirepass "$${REDIS_PASSWORD}" --maxmemory 256mb --maxmemory-policy noeviction'
+    ports:
+      - '127.0.0.1:${DSS_REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli --no-auth-warning ping | grep -qx PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 128
+
+  rabbitmq:
+    <<: *service
+    image: rabbitmq:4.0.7-management
+    hostname: tikcookie-rabbitmq
+    environment:
+      TZ: Asia/Shanghai
+      RABBITMQ_DEFAULT_USER: ${DSS_RABBIT_USERNAME:?Set a non-guest RabbitMQ username}
+      RABBITMQ_DEFAULT_PASS: ${DSS_RABBIT_PASSWORD:?Set a new local RabbitMQ password}
+      RABBITMQ_DEFAULT_VHOST: ${DSS_RABBIT_VHOST:-/dss}
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: '-rabbit vm_memory_high_watermark {absolute,402653184} disk_free_limit 1073741824'
+    ports:
+      - '127.0.0.1:${DSS_RABBIT_PORT:-5672}:5672'
+      - '127.0.0.1:15672:15672'
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD-SHELL', 'rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms']
+      interval: 20s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 512
+
+  es:
+    <<: *service
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.18.8
+    environment:
+      TZ: Asia/Shanghai
+      discovery.type: single-node
+      xpack.security.enabled: 'true'
+      xpack.security.autoconfiguration.enabled: 'false'
+      xpack.security.http.ssl.enabled: 'false'
+      xpack.security.transport.ssl.enabled: 'false'
+      xpack.ml.enabled: 'false'
+      ES_JAVA_OPTS: '-Xms1g -Xmx1g'
+      ELASTIC_PASSWORD: ${DSS_ES_PASSWORD:?Set a new local elastic password}
+    ports:
+      - '127.0.0.1:9200:9200'
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl --fail --silent --max-time 5 --user "elastic:$${ELASTIC_PASSWORD}" "http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=3s" >/dev/null']
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: 2g
+    cpus: 1.5
+    pids_limit: 512
+
+  logstash:
+    <<: *service
+    image: tikcookie-logstash:8.18.8-jdbc8.4.0
+    build:
+      context: ../logstash
+      dockerfile: Dockerfile
+    environment:
+      TZ: Asia/Shanghai
+      LS_JAVA_OPTS: '-Xms512m -Xmx512m -Duser.timezone=Asia/Shanghai'
+      DSS_LOGSTASH_MYSQL_PASSWORD: ${DSS_LOGSTASH_MYSQL_PASSWORD:?Set the read-only JDBC password}
+      DSS_ES_PASSWORD: ${DSS_ES_PASSWORD:?Set the elastic password}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      es:
+        condition: service_healthy
+    volumes:
+      - logstash-data:/usr/share/logstash/data
+    # No host ports; its unauthenticated monitoring API stays inside the container.
+    healthcheck:
+      test: ['CMD-SHELL', 'curl --fail --silent --max-time 5 http://127.0.0.1:9600/_node/stats/pipelines/main | grep -q ''"main"''']
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 120s
+    mem_limit: 1536m
+    cpus: 1.0
+    pids_limit: 256
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+  elasticsearch-data:
+  logstash-data:

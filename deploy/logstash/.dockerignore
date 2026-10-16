@@ -1,0 +1,4 @@
+**/.env*
+**/*.jar
+**/__pycache__
+**/.contract-*

@@ -1,0 +1,19 @@
+{
+  "index_patterns": ["dss_shop"],
+  "priority": 200,
+  "template": {
+    "settings": {"number_of_shards": 1, "number_of_replicas": 0},
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "id": {"type": "keyword"},
+        "name": {"type": "text", "analyzer": "standard"},
+        "address": {"type": "text", "analyzer": "standard"},
+        "category": {"type": "keyword"},
+        "cover": {"type": "keyword", "index": false},
+        "businessHours": {"type": "keyword", "index": false},
+        "createdAt": {"type": "date", "format": "yyyy-MM-dd HH:mm:ss"}
+      }
+    }
+  }
+}
